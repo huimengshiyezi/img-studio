@@ -364,16 +364,9 @@
 <section class="drawer" id="cfgDrawer">
   <div class="drawerInner">
     <div class="cfgGrid">
-      <div class="field" style="grid-column:1/-1">
-        <label>站点（切站点会自动带出那个站点上次用的 Key 与模型）</label>
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
-          <select id="siteSelect" style="max-width:340px"></select>
-          <span class="hint" id="siteHint" style="margin:0"></span>
-        </div>
-      </div>
       <div class="field">
-        <label>API 基础地址（只填域名也行，会自动补 /v1）</label>
-        <input type="text" id="baseUrl" placeholder="https://toapis.cn/v1">
+        <label>接口地址（OpenAI 兼容；只填域名也行，会自动补 /v1）（只填域名也行，会自动补 /v1）</label>
+        <input type="text" id="baseUrl" placeholder="https://你的接口域名/v1">
       </div>
       <div class="field">
         <label>API Key</label>
@@ -391,8 +384,7 @@
       </div>
       <div class="field" style="grid-column:1/-1">
         <div class="hint" id="autoHint">
-          填 <span class="mono">https://toapis.cn</span> 或 <span class="mono">https://toapis.cn/v1</span> 都可以 ——
-          页面会自己试出对的那一个，并在生成成功后把纠正结果写回这里。切换站点不用改任何别的设置。
+          填域名或「域名/v1」都可以 —— 页面会自己试出对的那一个，并在生成成功后把纠正结果写回这里。
         </div>
       </div>
     </div>
@@ -401,7 +393,7 @@
       <summary>高级参数（质量 / 返回格式 / 重试）</summary>
       <div class="advGrid">
         <div class="field">
-          <label>尺寸写法（换站点若报 size 错误，这里手动指定）</label>
+          <label>尺寸写法（若接口报 size 错误，这里手动指定）</label>
           <select id="paramStyle">
             <option value="auto">自动（先试记住的，被拒自动换）</option>
             <option value="pixel">像素尺寸 size=1536x864</option>
@@ -607,14 +599,14 @@ const RES = [
 
 /* ============================================================
    尺寸写法（各家网关不一样，2026-09-18 逐家实测得出）
-     pixel : size="1536x864"                          —— OpenAI 风格（llmway）
-     ratio : size="16:9" + resolution="2K"            —— toapis 的 gpt-image 系列
-     meta  : size="16:9" + metadata.resolution="2K"   —— toapis 的 gemini 系列
+     pixel : size="1536x864"                          —— OpenAI 风格（该网关）
+     ratio : size="16:9" + resolution="2K"            —— 某些网关的 gpt-image 系列
+     meta  : size="16:9" + metadata.resolution="2K"   —— 某些网关的 gemini 系列
    「自动」= 先按记住的写法发；被拒就依次换下一种，成功的那种按站点记下来。
    ============================================================ */
 const STYLE_ORDER = ['pixel', 'ratio', 'meta'];
 const STYLE_LABEL = { pixel: '像素尺寸', ratio: '比例+分辨率', meta: '比例+metadata.resolution' };
-// ⚠ 实测：同一个站点里不同模型可能要不同写法（llmway 的 gemini-3.1-flash-image 要像素、
+// ⚠ 实测：同一个站点里不同模型可能要不同写法（某些网关的 gemini-3.1-flash-image 要像素、
 //    gemini-3.1-flash-image-preview 要比例+分辨率），所以键要带模型名。
 //    键用规范化后的「基础地址|模型」，不依赖 URL 解析。
 function styleKey() { return trimBase(cfg.baseUrl) + '|' + cfg.model; }
@@ -655,7 +647,7 @@ function fitSize(rw, rh, edge) {
   return { w, h };
 }
 
-/* 模型列表从网关动态拉取（不同站点模型不同：llmway 有 3 个，toapis 只有 1 个）。
+/* 模型列表从网关动态拉取（不同站点模型不同：该网关 有 3 个，该网关 只有 1 个）。
    下面是拉取失败时的兜底，以及对已知模型的备注。 */
 const MODEL_NOTES = {
   'gpt-image-2': '实测可用',
@@ -666,7 +658,7 @@ let MODELS = [{ id: 'gpt-image-2', desc: '兜底默认（没能从网关拉到�
 
 /* ---------- 状态 ---------- */
 let cfg = {
-  baseUrl: 'https://llmway.ai/v1', apiKey: '', model: 'gpt-image-2',
+  baseUrl: '', apiKey: '', model: 'gpt-image-2',
   ratio: '16:9', res: '1.5K', n: 1, sizeW: 1536, sizeH: 864, linked: true,
   quality: 'high', responseFormat: '', outputFormat: '', extra: '',
   autoRetry: true, maxAttempts: 8, timeoutMin: 15,
@@ -683,7 +675,7 @@ function loadCfg() {
 }
 function saveCfg(silent) {
   readForm();
-  rememberKey();   // 把当前站点的 Key / 模型记到该站点名下
+  rememberKey();   // 把当前站点的 Key / 模型记到该接口名下
   localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
   if (!silent) setNotice('ok', '配置已保存', '下次打开这个页面会自动带上，不用重填。');
 }
@@ -744,17 +736,17 @@ function log(msg, kind = '') {
 }
 function explain(status, text) {
   const t = text || '';
-  if (t.trim().startsWith('<')) return ['接口返回的是网页，不是数据', '几乎可以肯定是「基础地址」填错了：要填到 /v1 为止，例如 https://llmway.ai/v1'];
+  if (t.trim().startsWith('<')) return ['接口返回的是网页，不是数据', '几乎可以肯定是「基础地址」填错了：要填到 /v1 为止，例如 https://你的接口域名/v1'];
   if (/channel_circuit_open|circuit breaker/i.test(t)) return ['网关通道被限流了（不是你账号或设置的问题）', '上游把这个出口 IP 限流，一触发就整条通道熔断，探针恢复后才放行。等几分钟再点生成，或把「最多尝试次数」调大。'];
-  // ⛔ 渠道不可用 / 令牌未授权：重试完全没用，必须去站点侧处理（2026-09-18 实测两站都是这个）
+  // ⛔ 渠道不可用 / 令牌未授权：重试完全没用，必须去接口侧处理（2026-09-18 实测两站都是这个）
   if (/no available channel|可用渠道失败|暂无可用渠道|model_not_found/i.test(t)) {
     return ['这个请求没有可用渠道（不是你账号或充值的问题）',
-      '两种可能：① 这条渠道正挂着；② **这个参数写法在该站点没有对应渠道** —— 实测 toapis 的「像素」和「比例」走的是不同渠道池，\n'
-      + '   所以页面会自动换另一种写法再试。若两种都失败，过一阵再试，或到站点的「令牌」页面确认模型权限。'];
+      '两种可能：① 这条渠道正挂着；② **这个参数写法在该接口没有对应渠道** —— 实测 某些网关的「像素」和「比例」走的是不同渠道池，\n'
+      + '   所以页面会自动换另一种写法再试。若两种都失败，过一阵再试，或到接口的「令牌」页面确认模型权限。'];
   }
   if (/无权访问|no access to model/i.test(t)) {
     return ['你的令牌没有这个模型的权限（403）',
-      '到站点的「令牌」页面编辑这个令牌，把「模型限制」放宽或设为不限，就能用它家其它的图像模型。\n'
+      '到接口的「令牌」页面编辑这个令牌，把「模型限制」放宽或设为不限，就能用它家其它的图像模型。\n'
       + '（不少站点默认只给令牌勾一两个模型，恰好那一两个的渠道挂了，就会两个站点都出不了图。）'];
   }
   // ⛔ 参数类错误：重试没用，必须把网关原话摊给用户看（2026-09-18 踩过：500 invalid_request 被当成"上游不稳定"白重试了 8 次）
@@ -769,39 +761,7 @@ function explain(status, text) {
   return [`请求失败（HTTP ${status}）`, t.slice(0, 800)];
 }
 
-/* ---------- 站点下拉：Key 与模型按站点分别记住，切换自动带出 ---------- */
-const SITE_PRESETS = [
-  { name: 'toapis.cn（国内）', base: 'https://toapis.cn/v1' },
-  { name: 'llmway.ai', base: 'https://llmway.ai/v1' },
-];
-function renderSiteSelect() {
-  const sel = $('#siteSelect');
-  const cur = trimBase(cfg.baseUrl);
-  const list = [...SITE_PRESETS];
-  for (const b of Object.keys(cfg.keysBySite || {})) {
-    if (!list.some((x) => trimBase(x.base) === trimBase(b))) list.push({ name: b.replace(/^https?:\/\//, ''), base: b });
-  }
-  sel.innerHTML = '';
-  for (const s of list) {
-    const o = document.createElement('option');
-    o.value = trimBase(s.base);
-    o.textContent = s.name;
-    sel.appendChild(o);
-  }
-  const oc = document.createElement('option');
-  oc.value = '__custom__';
-  oc.textContent = '其它站点 / 手动填写…';
-  sel.appendChild(oc);
-  sel.value = list.some((x) => trimBase(x.base) === cur) ? cur : '__custom__';
-  updateSiteHint();
-}
-function updateSiteHint() {
-  const n = Object.keys(cfg.keysBySite || {}).length;
-  $('#siteHint').textContent = n
-    ? `已记住 ${n} 个站点的 Key 与模型，切换时自动带出。`
-    : '第一次用某个站点时填一次 Key，之后会自动记住。';
-}
-/* 把当前站点的 Key / 模型记到该站点名下 */
+/* Key 与模型按「接口地址」分别记住，换回同一地址自动带出（不含任何预设站点） */
 function rememberKey() {
   const b = trimBase(cfg.baseUrl);
   if (!b) return;
@@ -811,33 +771,17 @@ function rememberKey() {
   if (k) cfg.keysBySite[b] = k;
   cfg.modelBySite[b] = cfg.model;
 }
-async function onSiteChange() {
-  const v = $('#siteSelect').value;
-  rememberKey();
-  if (v === '__custom__') { $('#baseUrl').focus(); $('#baseUrl').select(); return; }
-  cfg.baseUrl = v;
-  $('#baseUrl').value = v;
-  const savedKey = (cfg.keysBySite || {})[v] || '';
-  $('#apiKey').value = savedKey;
-  const savedModel = (cfg.modelBySite || {})[v];
-  if (savedModel) { cfg.model = savedModel; $('#modelLabel').textContent = savedModel; }
-  saveCfg(true);
-  updateSiteHint();
-  log(`已切到站点 ${v}` + (savedKey ? '（Key 自动填上了）' : '（这个站点还没有 Key，填一次就会记住）'), 's');
-  if (savedKey) await refreshModels(true);
-}
-/* 手动改了地址：把该站点上次的 Key 带出来 */
+/* 手动改了地址：把该接口上次的 Key 带出来 */
 function onBaseUrlEdited() {
   const b = trimBase($('#baseUrl').value);
   cfg.baseUrl = b;
   const savedKey = (cfg.keysBySite || {})[b];
   if (savedKey && savedKey !== $('#apiKey').value) {
     $('#apiKey').value = savedKey;
-    log('这个站点上次的 Key 已自动填上', 's');
+    log('这个接口上次的 Key 已自动填上', 's');
   }
   const savedModel = (cfg.modelBySite || {})[b];
   if (savedModel && savedModel !== cfg.model) { cfg.model = savedModel; $('#modelLabel').textContent = savedModel; }
-  renderSiteSelect();
   saveCfg(true);
 }
 
@@ -978,8 +922,8 @@ function updateSizeNote() {
 }
 
 /* ============================================================
-   通用接口层 —— 换站点不用改别的东西
-   不同网关对 /v1 的要求不一样（toapis 要 /v1，有的站点根路径也行），
+   通用接口层 —— 换接口不用改别的东西
+   不同网关对 /v1 的要求不一样（该网关 要 /v1，有的站点根路径也行），
    这里一律两个候选都试，谁通用谁。
    ============================================================ */
 function baseCandidates(raw) {
@@ -1063,7 +1007,7 @@ async function refreshModels(quiet) {
     }
     return res;
   }
-  // 自动纠正地址（这是换站点最容易踩的坑）
+  // 自动纠正地址（这是换接口最容易踩的坑）
   if (trimBase(res.base) !== trimBase(cfg.baseUrl)) {
     log(`接口地址已自动纠正为 ${res.base}`, 's');
     cfg.baseUrl = res.base;
@@ -1076,7 +1020,7 @@ async function refreshModels(quiet) {
       const old = cfg.model;
       cfg.model = MODELS[0].id;
       $('#modelLabel').textContent = cfg.model;
-      log(`「${old}」在这个站点不存在，已自动切到「${cfg.model}」`, 'w');
+      log(`「${old}」在这个接口不存在，已自动切到「${cfg.model}」`, 'w');
       if (!quiet) setNotice('warn', '已自动切换模型', `「${old}」不在这个网关的模型列表里；已切到「${cfg.model}」。`);
     }
     renderModelList();
@@ -1085,13 +1029,13 @@ async function refreshModels(quiet) {
   if (!quiet) {
     setState('接口正常', 'ok');
     setNotice('ok', '接口正常 ✓',
-      `实际请求地址：${imageUrl(cfg.baseUrl)}\n可用模型：${res.ids.length ? res.ids.join('、') : '（这个站点没返回模型列表，沿用当前选择）'}`);
+      `实际请求地址：${imageUrl(cfg.baseUrl)}\n可用模型：${res.ids.length ? res.ids.join('、') : '（这个接口没返回模型列表，沿用当前选择）'}`);
   }
   return res;
 }
 
 /* ============================================================
-   异步任务制接口（有的站点 POST 只回任务号，要再轮询；如 toapis）
+   异步任务制接口（有的站点 POST 只回任务号，要再轮询；如 该网关）
    ============================================================ */
 function isTaskResponse(j) {
   if (!j || typeof j !== 'object') return false;
@@ -1270,7 +1214,7 @@ function triggerDownload(blob, name) {
 function fileNameFor(dims, body, ext) {
   return `${stamp()}-${body.model}${dims ? '-' + dims.w + 'x' + dims.h : ''}.${ext || 'png'}`;
 }
-/* 按真实格式决定扩展名（实测：toapis 的 gemini 模型返回的是 JPEG，不是 PNG） */
+/* 按真实格式决定扩展名（实测：某些网关的 gemini 模型返回的是 JPEG，不是 PNG） */
 async function extFromBlob(blob) {
   const t = ((blob && blob.type) || '').toLowerCase();
   if (/jpe?g/.test(t)) return 'jpg';
@@ -1307,7 +1251,7 @@ async function autoSaveImage(src, dims, body, meta) {
 
 /* ============================================================
    参考图（图生图）：本地图 → 先上传拿 URL → 再随生成请求发出
-   toapis 不接受 base64，必须走 POST {基础地址}/uploads/images（multipart）
+   该网关 不接受 base64，必须走 POST {基础地址}/uploads/images（multipart）
    ============================================================ */
 let refItems = [];        // { id, file, url, thumb }
 let activeRefUrls = [];   // 本次生成实际要带的参考图 URL
@@ -1317,14 +1261,14 @@ function refLimit() {
   const m = cfg.model || '';
   if (/-vip$/i.test(m) || /official/i.test(m)) return 14;   // gemini VIP / Official
   if (/^gemini/i.test(m)) return 6;                          // gemini 普通版
-  if (/^gpt-image/i.test(m)) return 6;                       // gpt-image 系列（toapis 路由）
+  if (/^gpt-image/i.test(m)) return 6;                       // gpt-image 系列（该网关 路由）
   return 6;
 }
 function refLimitNote() {
   const m = cfg.model || '';
   if (/-vip$/i.test(m) || /official/i.test(m)) return `这个模型最多 ${refLimit()} 张参考图`;
   if (/^gemini/i.test(m)) return 'gemini 普通版最多 6 张（要 14 张得用带 -vip 的版本）';
-  if (/^gpt-image/i.test(m)) return 'gpt-image 在 toapis 这条路由上最多 6 张（OpenAI 原生接口才是 16）';
+  if (/^gpt-image/i.test(m)) return 'gpt-image 在 该网关 这条路由上最多 6 张（OpenAI 原生接口才是 16）';
   return `最多 ${refLimit()} 张参考图`;
 }
 function renderRefs() {
@@ -1385,13 +1329,13 @@ async function uploadRefs() {
         signal: AbortSignal.timeout(180000),
       });
     } catch (e) {
-      setNotice('err', '参考图上传失败', ((e && e.message) || '') + '\n\n可能是网络问题，或这个站点没有上传接口。');
+      setNotice('err', '参考图上传失败', ((e && e.message) || '') + '\n\n可能是网络问题，或这个接口没有上传接口。');
       return null;
     }
     const text = await r.text();
     if (r.status !== 200) {
       setNotice('err', `参考图上传失败（HTTP ${r.status}）`,
-        text.slice(0, 300) + `\n\n上传接口是 POST ${base}/uploads/images（toapis 有）。换到别的站点时可能不支持参考图。`);
+        text.slice(0, 300) + `\n\n上传接口是 POST ${base}/uploads/images（该网关 有）。换到别的站点时可能不支持参考图。`);
       return null;
     }
     let j = null;
@@ -1447,9 +1391,9 @@ async function generate() {
   if (!prompt) { setNotice('err', '还没有写提示词', '在下面的输入框里描述一下你想生成的画面。'); return; }
   readForm();
   if (!cfg.apiKey) { setNotice('err', '还没有填 API Key', '点右上角「⚙ 接口设置」，填入密钥后点保存。'); openDrawer('cfgDrawer'); return; }
-  if (!cfg.baseUrl) { setNotice('err', '还没有填接口地址', '例如 https://llmway.ai/v1'); openDrawer('cfgDrawer'); return; }
+  if (!cfg.baseUrl) { setNotice('err', '还没有填接口地址', '例如 https://你的接口域名/v1'); openDrawer('cfgDrawer'); return; }
 
-  // 参考图：先上传拿 URL（toapis 不接受 base64）
+  // 参考图：先上传拿 URL（该网关 不接受 base64）
   activeRefUrls = [];
   if (refItems.length) {
     const urls = await uploadRefs();
@@ -1465,7 +1409,7 @@ async function generate() {
   catch (e) { setNotice('err', '参数有误', e.message); return; }
   if (styles.length > 1) log(`尺寸写法：${STYLE_LABEL[styles[si]]}（被拒会自动换下一种）`, 'i');
 
-  // 生图前先用只读接口把「基础地址」试对 —— 换站点最常见的坑就是少了 /v1。
+  // 生图前先用只读接口把「基础地址」试对 —— 换接口最常见的坑就是少了 /v1。
   // 这一步只请求 /models，不产生生图、不花钱；同一个地址只探一次。
   if (trimBase(cfg.baseUrl) !== baseVerified) await refreshModels(true);
 
@@ -1506,7 +1450,7 @@ async function generate() {
 
         // 有的站点是「异步任务制」：POST 只返回任务号，要再轮询取结果
         if (isTaskResponse(json)) {
-          log(`这个站点是异步任务制，任务号 ${json.id}，开始轮询…`, 'i');
+          log(`这个接口是异步任务制，任务号 ${json.id}，开始轮询…`, 'i');
           setState('排队 / 生成中…', 'run');
           const done = await pollTask(cands[ci], json.id, (j) => {
             const p = Number(j.progress);
@@ -1552,7 +1496,7 @@ async function generate() {
         }
 
         log(`成功：${secs}s，返回 ${items.length} 张`, 's');
-        // 记住「这个站点的这个模型」用哪种尺寸写法（换站点 / 换模型都不用手动试）
+        // 记住「这个接口的这个模型」用哪种尺寸写法（换接口 / 换模型都不用手动试）
         if (cfg.paramStyle === 'auto') {
           cfg.styleByModel = cfg.styleByModel || {};
           if (cfg.styleByModel[styleKey()] !== styles[si]) {
@@ -1588,7 +1532,7 @@ async function generate() {
       if (looksLikeWrongPath(res.status, text) && ci < cands.length - 1) {
         ci++;
         log(`路径不对，改试 ${imageUrl(cands[ci])}`, 'w');
-        setNotice('warn', '接口路径不对，正在自动换一个', '换站点后常见：有的网关要在地址后面带 /v1。页面会自己试出来。');
+        setNotice('warn', '接口路径不对，正在自动换一个', '换接口后常见：有的网关要在地址后面带 /v1。页面会自己试出来。');
         attempt--;
         continue;
       }
@@ -1601,7 +1545,7 @@ async function generate() {
       const isAuth = res.status === 401 || res.status === 403 || /无权访问|no access to model|invalid token|unauthorized/i.test(text);
       const retryable = !isParam && !isDeadEnd && (res.status === 429 || res.status >= 500);
 
-      // ⭐ 换尺寸写法：实测 toapis 的「像素」和「比例」走的是**不同的渠道池**——
+      // ⭐ 换尺寸写法：实测 某些网关的「像素」和「比例」走的是**不同的渠道池**——
       //    像素写法会报"没有可用渠道"，而比例写法能用。所以除了"被拒"，
       //    "无渠道 / 任务失败 / 4xx5xx" 也要换写法再试，否则会漏掉能用的那种。
       if (!isAuth && si < styles.length - 1 && (isParam || isDeadEnd || res.status >= 400 || looksLikeSizeComplaint(text))) {
@@ -2230,7 +2174,6 @@ function onSizeInput(which) {
 $('#sizeW').addEventListener('change', () => onSizeInput('w'));
 $('#sizeH').addEventListener('change', () => onSizeInput('h'));
 $('#baseUrl').addEventListener('change', onBaseUrlEdited);
-$('#siteSelect').addEventListener('change', onSiteChange);
 $('#btnClearPrompt').addEventListener('click', () => {
   if (!$('#prompt').value) return;
   $('#prompt').value = '';
@@ -2290,7 +2233,6 @@ function normalizeCfg() {
   updateSizeNote();
   renderModelList();
   renderParamUI();
-  renderSiteSelect();
   const hasKey = !!cfg.apiKey;
   if (!hasKey) openDrawer('cfgDrawer');
   restoreDir();   // 恢复上次选的保存文件夹（不支持就直接用浏览器下载）
@@ -2301,7 +2243,7 @@ function normalizeCfg() {
   if (!hasKey) log('首次使用：点右上角「⚙ 接口设置」填入 API Key 并保存。', 'w');
   else {
     log('已从浏览器本地存储恢复上次的配置。', 's');
-    // 有配置就静默拉一次模型列表：换站点后模型名会不一样，这里自动对齐
+    // 有配置就静默拉一次模型列表：换接口后模型名会不一样，这里自动对齐
     refreshModels(true);
   }
 })();
