@@ -1,0 +1,7 @@
+# 内部产物，不对外发布
+dev/
+gen-image.mjs
+诊断报告.md
+prompt-*.txt
+*.log
+__pycache__/

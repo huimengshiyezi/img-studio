@@ -1,0 +1,2310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 生图工作台</title>
+<style>
+  :root{
+    --bg:#f5f6f8;
+    --surface:#ffffff;
+    --surface-2:#f3f4f6;
+    --surface-3:#e9ebef;
+    --line:#e5e7eb;
+    --line-strong:#d6d9de;
+    --text:#1a1d21;
+    --text-2:#5c636e;
+    --text-3:#8b929c;
+    --accent:#2f6bff;
+    --accent-soft:#eef3ff;
+    --ok:#12a150;
+    --warn:#c07a00;
+    --err:#d92d20;
+    --err-soft:#fef3f2;
+    --warn-soft:#fffaeb;
+    --radius:14px;
+    --shadow:0 2px 10px rgba(16,24,40,.06);
+    --shadow-lg:0 10px 34px rgba(16,24,40,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.6 "Segoe UI","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .grow{flex:1}
+  .mono{font-family:Consolas,"Cascadia Mono",monospace; font-variant-numeric:tabular-nums}
+
+  /* ---------- 顶栏 ---------- */
+  .topbar{
+    display:flex; align-items:center; gap:10px; padding:10px 18px;
+    background:var(--surface); border-bottom:1px solid var(--line); flex:none;
+  }
+  .brand{display:flex; align-items:center; gap:8px; font-weight:600; font-size:15px}
+  .brand .logo{font-size:17px}
+  .statusPill{
+    display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--text-2);
+    background:var(--surface-2); border-radius:999px; padding:4px 12px;
+  }
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--text-3);flex:none}
+  .dot.run{background:var(--accent); animation:pulse 1.1s infinite}
+  .dot.ok{background:var(--ok)} .dot.err{background:var(--err)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  .iconBtn{
+    display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--text-2);
+    background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    padding:6px 12px; cursor:pointer; transition:.15s; position:relative;
+  }
+  .iconBtn:hover{background:var(--surface-2); color:var(--text)}
+  .iconBtn.on{background:var(--accent-soft); border-color:#c7d8ff; color:var(--accent)}
+  .iconBtn .badge{
+    position:absolute; top:-5px; right:-5px; width:9px; height:9px; border-radius:50%;
+    background:var(--err); border:2px solid var(--surface); display:none;
+  }
+  .iconBtn .badge.on{display:block}
+
+  /* ---------- 抽屉（可折叠） ---------- */
+  .drawer{
+    flex:none; overflow:hidden; max-height:0; transition:max-height .26s ease;
+    background:var(--surface); border-bottom:1px solid transparent;
+  }
+  .drawer.open{max-height:80vh; overflow:auto; border-bottom-color:var(--line)}
+  .drawerInner{padding:16px 18px 18px; max-width:1180px; margin:0 auto; width:100%}
+  .cfgGrid{display:grid; grid-template-columns:1fr 1fr auto; gap:12px; align-items:end}
+  @media(max-width:820px){ .cfgGrid{grid-template-columns:1fr} }
+  .field{display:flex; flex-direction:column; gap:5px}
+  .field label{font-size:12px; color:var(--text-2)}
+  input[type=text],input[type=password],input[type=number],select,textarea{
+    font-family:inherit; font-size:13.5px; color:var(--text); background:var(--surface);
+    border:1px solid var(--line-strong); border-radius:10px; padding:9px 12px; outline:none;
+    transition:border-color .15s, box-shadow .15s;
+  }
+  input:focus,select:focus,textarea:focus{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+  .btn{
+    font-family:inherit; font-size:13px; color:var(--text); background:var(--surface);
+    border:1px solid var(--line-strong); border-radius:10px; padding:9px 16px;
+    cursor:pointer; transition:.15s; white-space:nowrap;
+  }
+  .btn:hover{background:var(--surface-2)}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+  .btn.primary:hover{filter:brightness(1.06)}
+  .btn.danger{color:var(--err); border-color:#f2c9c5}
+  .btn.danger:hover{background:var(--err-soft)}
+  .btn:disabled{opacity:.5; cursor:not-allowed}
+  .keyRow{display:flex; gap:8px}
+  .keyRow input{flex:1}
+  details.adv{margin-top:14px}
+  details.adv summary{cursor:pointer; font-size:12.5px; color:var(--text-2); user-select:none; padding:4px 0}
+  .advGrid{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-top:10px}
+  .swatch{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-2); margin-top:12px}
+  .swatch input{width:16px;height:16px;accent-color:var(--accent)}
+
+  .logBox{
+    background:#fbfbfc; border:1px solid var(--line); border-radius:10px; padding:10px 12px;
+    max-height:230px; overflow:auto; font-family:Consolas,"Cascadia Mono",monospace;
+    font-size:12px; line-height:1.75; white-space:pre-wrap; word-break:break-all; color:#4a5260;
+  }
+  .logBox .e{color:var(--err)} .logBox .w{color:var(--warn)} .logBox .s{color:var(--ok)} .logBox .i{color:var(--accent)}
+
+  /* ---------- 主区：左竖版提示词 + 右画布 ---------- */
+  .workspace{
+    flex:1; min-height:0; display:grid; gap:14px; padding:12px 16px 14px;
+    grid-template-columns:minmax(320px, 400px) 1fr;
+  }
+  @media(max-width:1000px){
+    .workspace{grid-template-columns:1fr; grid-template-rows:auto 1fr;}
+    .composerCol{height:auto !important}
+    .composerCol textarea{min-height:160px !important}
+  }
+  .composerCol{
+    min-height:0; display:flex; flex-direction:column;
+    background:var(--surface); border:1px solid var(--line-strong); border-radius:18px;
+    padding:12px; box-shadow:var(--shadow);
+  }
+  .composerCol:focus-within{border-color:#b9caff; box-shadow:0 0 0 4px var(--accent-soft), var(--shadow)}
+  .promptHead{display:flex; align-items:center; gap:8px; flex:none; margin-bottom:6px}
+  .iconBtn.sm{padding:3px 9px; font-size:12px; border-radius:8px}
+  .composerCol textarea{
+    flex:1; min-height:0; width:100%; border:none; background:transparent; resize:none;
+    padding:6px 4px; font-size:14.5px; line-height:1.75; outline:none;
+  }
+  .composerCol textarea:focus{box-shadow:none}
+  .composerCol textarea::placeholder{color:var(--text-3)}
+  /* 参考图区 */
+  .refBox{flex:none; border:1px dashed var(--line-strong); border-radius:12px; padding:8px 10px; margin-bottom:8px; transition:.15s}
+  .refBox.drag{border-color:var(--accent); background:var(--accent-soft)}
+  .refHead{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+  .refStrip{display:flex; gap:7px; flex-wrap:wrap; margin-top:8px}
+  .refStrip:empty{display:none}
+  .refThumb{position:relative; width:56px; height:56px; border-radius:9px; overflow:hidden; border:1px solid var(--line); background:var(--surface-2)}
+  .refThumb img{width:100%; height:100%; object-fit:cover; display:block}
+  .refThumb .del{
+    position:absolute; top:1px; right:1px; width:17px; height:17px; border-radius:50%;
+    background:rgba(20,22,26,.72); color:#fff; border:none; cursor:pointer; font-size:12px; line-height:1;
+    display:flex; align-items:center; justify-content:center; padding:0;
+  }
+  .refThumb .del:hover{background:var(--err)}
+  .refThumb.bad{outline:2px solid var(--err)}
+  .composerCol .bar{display:flex; align-items:center; gap:8px; flex:none; margin-top:8px; flex-wrap:wrap}
+  .composerCol .tip{
+    display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-start;
+    font-size:11.5px; color:var(--text-3); margin-top:8px; flex:none;
+  }
+
+  /* ---------- 画布：不论多大的图都整张铺满可视区 ---------- */
+  .canvas{min-height:0; display:flex; flex-direction:column}
+  #results{
+    flex:1; min-height:0; display:grid; gap:14px;
+    grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));
+    grid-auto-rows:minmax(0, 1fr);
+    overflow:hidden;
+  }
+  #results.scroll{overflow:auto; grid-auto-rows:auto}
+
+  .stage{flex:1; overflow:auto; padding:22px 18px 8px}
+  .stageInner{max-width:1180px; margin:0 auto}
+  .notice{
+    border-radius:12px; padding:12px 15px; font-size:13px; margin-bottom:16px;
+    white-space:pre-wrap; word-break:break-word; display:none;
+  }
+  .notice.show{display:block}
+  .notice.err{background:var(--err-soft); border:1px solid #f5cdc9; color:#8a2018}
+  .notice.ok{background:#eefaf3; border:1px solid #bfe8d2; color:#0e6b3c}
+  .notice.warn{background:var(--warn-soft); border:1px solid #f2e0b0; color:#7a5300}
+  .notice b{display:block; margin-bottom:4px}
+  .empty{
+    text-align:center; color:var(--text-3); padding:70px 20px; font-size:13.5px;
+  }
+  .empty .big{font-size:34px; margin-bottom:12px; opacity:.5}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:18px}
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    overflow:hidden; box-shadow:var(--shadow); display:flex; flex-direction:column; min-height:0;
+  }
+  /* 关键：整张图完整可见（contain），不裁切、不溢出 */
+  .card img{
+    flex:1; min-height:0; width:100%; display:block; object-fit:contain;
+    background:#eef0f3; cursor:zoom-in;
+  }
+  #results.scroll .card img{flex:none; height:auto; max-height:none}
+  .card .meta{
+    padding:10px 13px 0; font-size:12px; color:var(--text-2);
+    display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;
+  }
+  .card .meta .dim{color:var(--text-3)}
+  .card .ops{display:flex; gap:7px; padding:9px 13px 13px}
+  .card .ops .btn{flex:1; padding:7px 8px; font-size:12.5px}
+
+  /* ---------- 底部输入区（即梦风） ---------- */
+  .composer{flex:none; padding:6px 18px 16px; background:linear-gradient(180deg,rgba(245,246,248,0),var(--bg) 34%)}
+  .composerInner{max-width:900px; margin:0 auto}
+  .box{
+    background:var(--surface); border:1px solid var(--line-strong); border-radius:20px;
+    padding:14px 14px 10px; box-shadow:var(--shadow); transition:border-color .15s, box-shadow .15s;
+  }
+  .box:focus-within{border-color:#b9caff; box-shadow:0 0 0 4px var(--accent-soft), var(--shadow)}
+  .box textarea{
+    width:100%; border:none; padding:0 4px; font-size:14.5px; line-height:1.7;
+    min-height:72px; max-height:240px; resize:none; background:transparent;
+  }
+  .box textarea:focus{box-shadow:none}
+  .box textarea::placeholder{color:var(--text-3)}
+  .bar{display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap}
+  .modeChip{
+    display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--accent);
+    padding:6px 10px 6px 4px; user-select:none;
+  }
+  .modeChip .mi{font-size:14px}
+  .chip{
+    display:inline-flex; align-items:center; gap:7px; font-family:inherit; font-size:13px;
+    color:var(--text); background:var(--surface-2); border:1px solid transparent;
+    border-radius:10px; padding:6px 11px; cursor:pointer; transition:.15s;
+  }
+  .chip:hover{background:var(--surface-3)}
+  .chip.on{background:var(--accent-soft); border-color:#c7d8ff; color:var(--accent)}
+  .chip .caret{color:var(--text-3); font-size:10px; line-height:1}
+  .ratioGlyph{
+    width:15px; height:15px; display:inline-flex; align-items:center; justify-content:center; flex:none;
+  }
+  .ratioGlyph i{display:block; border:1.6px solid currentColor; border-radius:2px; opacity:.85}
+  .cost{font-size:12.5px; color:var(--text-3); margin-right:2px}
+  .sendBtn{
+    width:38px; height:38px; border-radius:50%; border:none; flex:none; cursor:pointer;
+    background:#1a1d21; color:#fff; font-size:17px; line-height:1; transition:.15s;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .sendBtn:hover:not(:disabled){background:#000; transform:translateY(-1px)}
+  .sendBtn:disabled{background:#c9ced6; cursor:not-allowed; transform:none}
+  .sendBtn.stop{background:var(--err)}
+  .tip{
+    text-align:center; font-size:11.5px; color:var(--text-3); margin-top:9px;
+    display:flex; gap:10px; justify-content:center; flex-wrap:wrap;
+  }
+
+  /* ---------- 浮层 ---------- */
+  .pop{
+    position:fixed; z-index:60; display:none; background:var(--surface);
+    border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow-lg);
+    padding:14px; min-width:300px;
+  }
+  .pop.open{display:block; animation:popIn .13s ease}
+  @keyframes popIn{from{opacity:0; transform:translateY(6px)}to{opacity:1; transform:none}}
+  .popTitle{font-size:12px; color:var(--text-3); margin:2px 0 9px}
+  .popTitle:not(:first-child){margin-top:16px}
+  .modelItem{
+    display:flex; align-items:flex-start; gap:11px; padding:10px 11px; border-radius:11px;
+    cursor:pointer; transition:.13s;
+  }
+  .modelItem:hover{background:var(--surface-2)}
+  .modelItem.sel{background:var(--accent-soft)}
+  .modelItem .mi{
+    width:26px;height:26px;border-radius:8px;background:var(--surface-3);flex:none;
+    display:flex;align-items:center;justify-content:center;font-size:13px;
+  }
+  .modelItem.sel .mi{background:#fff}
+  .modelItem .mt{font-size:13.5px; font-weight:500}
+  .modelItem .md{font-size:11.5px; color:var(--text-3); margin-top:2px}
+  .modelItem .check{margin-left:auto; color:var(--accent); font-size:14px}
+  .ratioGrid{display:grid; grid-template-columns:repeat(9,1fr); gap:3px}
+  .ratioItem{
+    display:flex; flex-direction:column; align-items:center; gap:5px; padding:8px 2px;
+    border-radius:10px; cursor:pointer; transition:.13s; font-size:11px; color:var(--text-2);
+  }
+  .ratioItem:hover{background:var(--surface-2)}
+  .ratioItem.sel{background:var(--accent-soft); color:var(--accent)}
+  .ratioItem .box{width:20px;height:20px;display:flex;align-items:center;justify-content:center}
+  .ratioItem .box i{display:block; border:1.6px solid currentColor; border-radius:2px}
+  .segRow{display:flex; gap:6px}
+  .seg{
+    flex:1; text-align:center; font-size:12.5px; color:var(--text-2); background:var(--surface-2);
+    border:1px solid transparent; border-radius:10px; padding:9px 6px; cursor:pointer; transition:.13s;
+  }
+  .seg:hover{background:var(--surface-3)}
+  .seg.sel{background:var(--accent-soft); border-color:#c7d8ff; color:var(--accent); font-weight:500}
+  .sizeRow{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-3)}
+  .sizeRow input{width:92px; text-align:center; padding:8px 6px}
+  .linkBtn{
+    background:var(--surface-2); border:1px solid var(--line); border-radius:8px; width:34px; height:34px;
+    cursor:pointer; font-size:13px; color:var(--text-3); transition:.15s;
+  }
+  .linkBtn.on{background:var(--accent-soft); border-color:#c7d8ff; color:var(--accent)}
+  .sizeNote{font-size:11.5px; color:var(--text-3); margin-top:8px; line-height:1.6}
+  .sizeNote.bad{color:var(--warn)}
+
+  .viewer{
+    position:fixed; inset:0; background:rgba(20,22,26,.86); display:none; z-index:99;
+    align-items:center; justify-content:center; padding:26px; cursor:zoom-out;
+  }
+  .viewer.on{display:flex}
+  .viewer img{max-width:100%; max-height:100%; object-fit:contain; border-radius:6px}
+  kbd{background:var(--surface-2); border:1px solid var(--line); border-radius:4px; padding:1px 5px; font-size:11px}
+
+  /* ---------- 资产库 ---------- */
+  .apPanel{
+    position:fixed; inset:0; z-index:80; display:none; flex-direction:column;
+    background:var(--bg);
+  }
+  .apPanel.on{display:flex}
+  .apHead{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap; flex:none;
+    padding:12px 18px; background:var(--surface); border-bottom:1px solid var(--line);
+  }
+  .apHead b{font-size:15px}
+  .apHead input[type=text],.apHead select{padding:6px 10px; font-size:13px}
+  .apBody{flex:1; min-height:0; display:grid; grid-template-columns:1fr minmax(300px, 380px)}
+  @media(max-width:900px){ .apBody{grid-template-columns:1fr} .apDetail{display:none} }
+  .apGrid{overflow:auto; padding:16px 18px}
+  .apDay{font-size:12.5px; color:var(--text-2); margin:16px 0 8px}
+  .apDay:first-child{margin-top:0}
+  .apItems{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px}
+  .apItem{
+    border:1px solid var(--line); border-radius:11px; overflow:hidden; cursor:pointer;
+    background:var(--surface); transition:.14s;
+  }
+  .apItem:hover{border-color:var(--accent); transform:translateY(-1px)}
+  .apItem.sel{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+  .apItem img{width:100%; aspect-ratio:1/1; object-fit:cover; display:block; background:var(--surface-2)}
+  .apItem .cap{
+    padding:6px 8px; font-size:11px; color:var(--text-3);
+    display:flex; justify-content:space-between; gap:6px;
+  }
+  .apItem .cap .m{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:96px}
+  .apDetail{
+    overflow:auto; background:var(--surface); border-left:1px solid var(--line); padding:16px;
+  }
+  .apEmpty{color:var(--text-3); font-size:13px; text-align:center; padding:40px 10px}
+  .apDetail img.big{width:100%; border-radius:10px; border:1px solid var(--line); background:var(--surface-2); display:block}
+  .apRow{display:flex; gap:8px; font-size:12.5px; margin-top:8px; color:var(--text-2)}
+  .apRow .k{color:var(--text-3); min-width:64px}
+  .apRow .v{color:var(--text); word-break:break-all}
+  .apPrompt{
+    margin-top:12px; background:var(--surface-2); border:1px solid var(--line); border-radius:9px;
+    padding:10px; font-size:12.5px; line-height:1.7; white-space:pre-wrap; max-height:220px; overflow:auto;
+  }
+  .apOps{display:flex; gap:7px; flex-wrap:wrap; margin-top:12px}
+  .apOps .btn{font-size:12px; padding:6px 11px}
+  .apRefs{display:flex; gap:6px; flex-wrap:wrap; margin-top:6px}
+  .apRefs img{width:46px; height:46px; object-fit:cover; border-radius:7px; border:1px solid var(--line)}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="logo">🎨</span> AI 生图工作台</div>
+  <span class="statusPill"><i class="dot" id="dot"></i><span id="stateText">空闲</span></span>
+  <span class="mono" id="elapsed" style="font-size:12.5px;color:var(--text-3)">0.0s</span>
+  <span class="grow"></span>
+  <button class="iconBtn" id="btnAssets">📚 资产</button>
+  <button class="iconBtn" id="btnLogToggle">📋 日志<span class="badge" id="logBadge"></span></button>
+  <button class="iconBtn" id="btnCfgToggle">⚙ 接口设置</button>
+</header>
+
+<!-- ============ 接口设置（可折叠） ============ -->
+<section class="drawer" id="cfgDrawer">
+  <div class="drawerInner">
+    <div class="cfgGrid">
+      <div class="field" style="grid-column:1/-1">
+        <label>站点（切站点会自动带出那个站点上次用的 Key 与模型）</label>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+          <select id="siteSelect" style="max-width:340px"></select>
+          <span class="hint" id="siteHint" style="margin:0"></span>
+        </div>
+      </div>
+      <div class="field">
+        <label>API 基础地址（只填域名也行，会自动补 /v1）</label>
+        <input type="text" id="baseUrl" placeholder="https://toapis.cn/v1">
+      </div>
+      <div class="field">
+        <label>API Key</label>
+        <div class="keyRow">
+          <input type="password" id="apiKey" placeholder="sk-...">
+          <button class="btn" id="btnEye" title="显示 / 隐藏">👁</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <div style="display:flex;gap:8px">
+          <button class="btn" id="btnTest">接口自检</button>
+          <button class="btn primary" id="btnSaveCfg">保存</button>
+        </div>
+      </div>
+      <div class="field" style="grid-column:1/-1">
+        <div class="hint" id="autoHint">
+          填 <span class="mono">https://toapis.cn</span> 或 <span class="mono">https://toapis.cn/v1</span> 都可以 ——
+          页面会自己试出对的那一个，并在生成成功后把纠正结果写回这里。切换站点不用改任何别的设置。
+        </div>
+      </div>
+    </div>
+
+    <details class="adv">
+      <summary>高级参数（质量 / 返回格式 / 重试）</summary>
+      <div class="advGrid">
+        <div class="field">
+          <label>尺寸写法（换站点若报 size 错误，这里手动指定）</label>
+          <select id="paramStyle">
+            <option value="auto">自动（先试记住的，被拒自动换）</option>
+            <option value="pixel">像素尺寸 size=1536x864</option>
+            <option value="ratio">比例+分辨率 size=16:9 &amp; resolution=2K</option>
+            <option value="meta">比例+metadata size=16:9 &amp; metadata.resolution=2K</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>质量 quality</label>
+          <select id="quality">
+            <option value="">不传（服务端默认）</option>
+            <option value="low">low</option>
+            <option value="medium">medium</option>
+            <option value="high" selected>high</option>
+            <option value="auto">auto</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>返回格式 response_format</label>
+          <select id="responseFormat">
+            <option value="">不传（返回图片数据，下载最稳）</option>
+            <option value="url">url（实测更快）</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>输出格式 output_format</label>
+          <select id="outputFormat">
+            <option value="">不传（png）</option>
+            <option value="png">png</option>
+            <option value="jpeg">jpeg</option>
+            <option value="webp">webp</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>最多尝试次数</label>
+          <input type="number" id="maxAttempts" value="8" min="1" max="20">
+        </div>
+        <div class="field">
+          <label>单次超时（分钟）</label>
+          <input type="number" id="timeoutMin" value="15" min="1" max="60">
+        </div>
+        <div class="field">
+          <label>附加 JSON 字段（可选）</label>
+          <input type="text" id="extra" placeholder='{"moderation":"low"}'>
+        </div>
+      </div>
+      <div class="swatch">
+        <input type="checkbox" id="autoRetry" checked>
+        <label for="autoRetry" style="margin:0; cursor:pointer">遇到网关限流 / 网络错误时自动退避重试</label>
+      </div>
+    </details>
+
+    <div style="margin-top:16px; border-top:1px solid var(--line); padding-top:14px">
+      <div class="field" style="margin:0">
+        <label>图片保存（生成后自动存盘）</label>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+          <button class="btn" id="btnPickDir">选择保存文件夹</button>
+          <span class="hint" id="dirLabel" style="margin:0">—</span>
+          <span style="flex:1"></span>
+          <label class="swatch" style="margin:0"><input type="checkbox" id="autoSave" checked>&nbsp;生成后自动保存</label>
+        </div>
+        <div class="hint" id="saveHint" style="margin-top:6px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 日志（可折叠） ============ -->
+<section class="drawer" id="logDrawer">
+  <div class="drawerInner">
+    <div class="logBox" id="log"></div>
+    <div style="display:flex; gap:8px; margin-top:10px">
+      <button class="btn" id="btnClearLog">清空日志</button>
+      <button class="btn" id="btnDlAll">下载全部图片</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 主区：左边竖版提示词，右边画布 ============ -->
+<main class="workspace">
+
+  <aside class="composerCol" id="composerCol">
+    <div class="promptHead">
+      <span class="modeChip"><span class="mi">▣</span>图片生成</span>
+      <span class="grow"></span>
+      <button class="iconBtn sm" id="btnClearPrompt" title="清空提示词">清空</button>
+    </div>
+
+    <!-- 参考图（图生图） -->
+    <div class="refBox" id="refBox">
+      <div class="refHead">
+        <button class="iconBtn sm" id="btnPickRefs">＋ 参考图</button>
+        <span class="hint" id="refHint">图生图用：可多张，也能直接拖进来或 Ctrl+V 粘贴</span>
+        <span class="grow"></span>
+        <span class="hint" id="refCount"></span>
+      </div>
+      <div class="refStrip" id="refStrip"></div>
+      <input type="file" id="refInput" accept="image/png,image/jpeg,image/webp,image/gif" multiple style="display:none">
+    </div>
+
+    <textarea id="prompt" placeholder="在这里写你想生成的画面。&#10;&#10;可以写很长 —— 画幅比例、构图、光线、材质、要避免的东西都可以逐条写清楚。&#10;&#10;写好点右下角箭头生成（或按 Ctrl+Enter）。"></textarea>
+    <div class="bar">
+      <button class="chip" id="btnModel"><span id="modelLabel">gpt-image-2</span><span class="caret">▼</span></button>
+      <button class="chip" id="btnParams">
+        <span class="ratioGlyph" id="paramGlyph"></span>
+        <span id="paramLabel">16:9 · 1.5K · 1</span>
+        <span class="caret">▼</span>
+      </button>
+      <span class="grow"></span>
+      <button class="sendBtn" id="btnGen" title="生成（Ctrl+Enter）">↑</button>
+    </div>
+    <div class="tip">
+      <span id="attemptText">待命</span>
+      <span>·</span><span id="costHint">按次计费</span>
+      <span>·</span><span><kbd>Ctrl</kbd>+<kbd>Enter</kbd> 生成</span>
+    </div>
+  </aside>
+
+  <section class="canvas">
+    <div class="notice" id="notice"></div>
+    <div id="results">
+      <div class="empty">
+        <div class="big">🖼</div>
+        还没有图片。在左边写好描述，点箭头开始生成。
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ============ 浮层：选模型 ============ -->
+<div class="pop" id="modelPop">
+  <div class="popTitle">选择模型</div>
+  <div id="modelList"></div>
+</div>
+
+<!-- ============ 浮层：比例 / 分辨率 / 数量 / 尺寸 ============ -->
+<div class="pop" id="paramPop" style="min-width:376px">
+  <div class="popTitle">选择比例</div>
+  <div class="ratioGrid" id="ratioGrid"></div>
+  <div class="popTitle">选择分辨率</div>
+  <div class="segRow" id="resRow"></div>
+  <div class="popTitle">选择生成数量</div>
+  <div class="segRow" id="nRow"></div>
+  <div class="popTitle">尺寸</div>
+  <div class="sizeRow">
+    <span>W</span><input type="number" id="sizeW" step="16" min="16">
+    <button class="linkBtn on" id="btnLink" title="锁定比例">🔗</button>
+    <span>H</span><input type="number" id="sizeH" step="16" min="16">
+    <span>PX</span>
+  </div>
+  <div class="sizeNote" id="sizeNote"></div>
+</div>
+
+<div class="viewer" id="viewer"><img id="viewerImg" alt=""></div>
+
+<!-- ============ 资产库（全屏面板） ============ -->
+<div class="apPanel" id="apPanel">
+  <div class="apHead">
+    <b>📚 资产库</b>
+    <span class="hint" id="apCount" style="margin:0"></span>
+    <input type="text" id="apSearch" placeholder="搜提示词 / 模型…" style="max-width:220px">
+    <select id="apModel" style="max-width:180px"></select>
+    <select id="apSort" style="max-width:130px">
+      <option value="new">最新在前</option>
+      <option value="old">最早在前</option>
+      <option value="model">按模型分组</option>
+      <option value="big">大图在前</option>
+    </select>
+    <span class="grow"></span>
+    <button class="btn" id="apRescan">扫描文件夹重建索引</button>
+    <button class="btn" id="apClose">关闭</button>
+  </div>
+  <div class="apBody">
+    <div class="apGrid" id="apGrid"></div>
+    <aside class="apDetail" id="apDetail"><div class="apEmpty">左边点一张图看详情</div></aside>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   AI 生图工作台 — 单文件版（只做生图）
+   接口: POST {baseUrl}/images/generations   （OpenAI 兼容）
+   ============================================================ */
+
+const $ = (s, r = document) => r.querySelector(s);
+const CFG_KEY = 'imgstudio.cfg.v2';       // 沿用 v2 键，你已保存的配置不会丢
+const PROMPT_KEY = 'imgstudio.prompt.v2';
+
+/* ---------- 尺寸体系：比例 + 分辨率档 → 具体宽高 ---------- */
+const MAX_PX = 8294400, MIN_PX = 655360, MAX_EDGE = 3840;   // 上游实测约束
+const RATIOS = [
+  { k: '智能', auto: true },
+  { k: '1:1', w: 1, h: 1 }, { k: '3:4', w: 3, h: 4 }, { k: '16:9', w: 16, h: 9 },
+  { k: '4:3', w: 4, h: 3 }, { k: '9:16', w: 9, h: 16 }, { k: '2:3', w: 2, h: 3 },
+  { k: '3:2', w: 3, h: 2 }, { k: '21:9', w: 21, h: 9 },
+];
+const RES = [
+  { k: '标清 1.5K', short: '1.5K', edge: 1536, api: '1K' },
+  { k: '高清 2K', short: '2K', edge: 2048, api: '2K' },
+  { k: '超清 4K', short: '4K', edge: 3840, api: '4K' },
+];
+
+/* ============================================================
+   尺寸写法（各家网关不一样，2026-09-18 逐家实测得出）
+     pixel : size="1536x864"                          —— OpenAI 风格（llmway）
+     ratio : size="16:9" + resolution="2K"            —— toapis 的 gpt-image 系列
+     meta  : size="16:9" + metadata.resolution="2K"   —— toapis 的 gemini 系列
+   「自动」= 先按记住的写法发；被拒就依次换下一种，成功的那种按站点记下来。
+   ============================================================ */
+const STYLE_ORDER = ['pixel', 'ratio', 'meta'];
+const STYLE_LABEL = { pixel: '像素尺寸', ratio: '比例+分辨率', meta: '比例+metadata.resolution' };
+// ⚠ 实测：同一个站点里不同模型可能要不同写法（llmway 的 gemini-3.1-flash-image 要像素、
+//    gemini-3.1-flash-image-preview 要比例+分辨率），所以键要带模型名。
+//    键用规范化后的「基础地址|模型」，不依赖 URL 解析。
+function styleKey() { return trimBase(cfg.baseUrl) + '|' + cfg.model; }
+function effectiveStyle() {
+  if (cfg.paramStyle && cfg.paramStyle !== 'auto') return cfg.paramStyle;
+  return (cfg.styleByModel || {})[styleKey()] || 'pixel';
+}
+function styleChain() {
+  if (cfg.paramStyle && cfg.paramStyle !== 'auto') return [cfg.paramStyle];
+  const first = effectiveStyle();
+  return [first, ...STYLE_ORDER.filter((s) => s !== first)];
+}
+/* 这个写法下，尺寸字段该怎么写 */
+function sizeFields(style) {
+  const r = RATIOS.find((x) => x.k === cfg.ratio);
+  const ratioStr = (!r || r.auto) ? null : cfg.ratio;
+  const resApi = (RES.find((x) => x.short === cfg.res) || RES[0]).api;
+  if (ratioStr && style === 'ratio') return { size: ratioStr, resolution: resApi };
+  if (ratioStr && style === 'meta') return { size: ratioStr, metadata: { resolution: resApi } };
+  return { size: cfg.sizeW + 'x' + cfg.sizeH };
+}
+/* 这个报错像不像"尺寸写法不对" */
+function looksLikeSizeComplaint(text) {
+  return /size|resolution|aspect|metadata/i.test(text) && /invalid|不支持|must be|unsupported|bad request/i.test(text);
+}
+const r16 = (v) => Math.max(16, Math.round(v / 16) * 16);
+function fitSize(rw, rh, edge) {
+  let w, h;
+  if (rw >= rh) { w = r16(edge); h = r16(edge * rh / rw); }
+  else { h = r16(edge); w = r16(edge * rw / rh); }
+  let guard = 0;
+  while ((w * h > MAX_PX || Math.max(w, h) > MAX_EDGE) && guard++ < 120) {
+    w = Math.max(16, Math.floor(w * 0.98 / 16) * 16);
+    h = Math.max(16, Math.floor(h * 0.98 / 16) * 16);
+  }
+  guard = 0;
+  while (w * h < MIN_PX && guard++ < 120) { w += 16; h += 16; }
+  return { w, h };
+}
+
+/* 模型列表从网关动态拉取（不同站点模型不同：llmway 有 3 个，toapis 只有 1 个）。
+   下面是拉取失败时的兜底，以及对已知模型的备注。 */
+const MODEL_NOTES = {
+  'gpt-image-2': '实测可用',
+  'gpt-image-2.5-flare': '未实测',
+  'gpt-image-2.5-sunburst': '未实测',
+};
+let MODELS = [{ id: 'gpt-image-2', desc: '兜底默认（没能从网关拉到模型列表）' }];
+
+/* ---------- 状态 ---------- */
+let cfg = {
+  baseUrl: 'https://llmway.ai/v1', apiKey: '', model: 'gpt-image-2',
+  ratio: '16:9', res: '1.5K', n: 1, sizeW: 1536, sizeH: 864, linked: true,
+  quality: 'high', responseFormat: '', outputFormat: '', extra: '',
+  autoRetry: true, maxAttempts: 8, timeoutMin: 15,
+  paramStyle: 'auto', styleByModel: {}, autoSave: true,
+  keysBySite: {}, modelBySite: {},
+};
+
+/* ---------- 读写配置（含从更早版本迁移，避免 Key 变空） ---------- */
+function loadCfg() {
+  try {
+    const raw = localStorage.getItem(CFG_KEY) || localStorage.getItem('imgstudio.cfg.v1');
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function saveCfg(silent) {
+  readForm();
+  rememberKey();   // 把当前站点的 Key / 模型记到该站点名下
+  localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+  if (!silent) setNotice('ok', '配置已保存', '下次打开这个页面会自动带上，不用重填。');
+}
+function readForm() {
+  cfg.baseUrl = $('#baseUrl').value.trim();
+  cfg.apiKey = $('#apiKey').value;
+  cfg.quality = $('#quality').value;
+  cfg.responseFormat = $('#responseFormat').value;
+  cfg.outputFormat = $('#outputFormat').value;
+  cfg.extra = $('#extra').value.trim();
+  cfg.autoRetry = $('#autoRetry').checked;
+  cfg.maxAttempts = Number($('#maxAttempts').value) || 8;
+  cfg.timeoutMin = Number($('#timeoutMin').value) || 15;
+  cfg.paramStyle = $('#paramStyle').value;
+  cfg.autoSave = $('#autoSave').checked;
+  cfg.sizeW = Number($('#sizeW').value) || cfg.sizeW;
+  cfg.sizeH = Number($('#sizeH').value) || cfg.sizeH;
+}
+function writeForm() {
+  $('#baseUrl').value = cfg.baseUrl;
+  $('#apiKey').value = cfg.apiKey;
+  $('#quality').value = cfg.quality;
+  $('#responseFormat').value = cfg.responseFormat;
+  $('#outputFormat').value = cfg.outputFormat;
+  $('#extra').value = cfg.extra;
+  $('#autoRetry').checked = cfg.autoRetry;
+  $('#maxAttempts').value = cfg.maxAttempts;
+  $('#timeoutMin').value = cfg.timeoutMin;
+  $('#paramStyle').value = cfg.paramStyle;
+  $('#autoSave').checked = cfg.autoSave !== false;
+  $('#sizeW').value = cfg.sizeW;
+  $('#sizeH').value = cfg.sizeH;
+  $('#btnLink').classList.toggle('on', cfg.linked);
+}
+
+/* ---------- 提示与状态 ---------- */
+function setNotice(kind, title, detail) {
+  const el = $('#notice');
+  el.className = 'notice show ' + kind;
+  el.innerHTML = '';
+  const b = document.createElement('b'); b.textContent = title;
+  el.appendChild(b);
+  el.appendChild(document.createTextNode(detail || ''));
+  if (kind === 'err') $('#logBadge').classList.add('on');
+}
+function clearNotice() { $('#notice').className = 'notice'; $('#logBadge').classList.remove('on'); }
+function setState(text, dotClass) {
+  $('#stateText').textContent = text;
+  $('#dot').className = 'dot' + (dotClass ? ' ' + dotClass : '');
+}
+function log(msg, kind = '') {
+  const box = $('#log');
+  const line = document.createElement('div');
+  if (kind) line.className = kind;
+  line.textContent = `[${new Date().toTimeString().slice(0, 8)}] ${msg}`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+function explain(status, text) {
+  const t = text || '';
+  if (t.trim().startsWith('<')) return ['接口返回的是网页，不是数据', '几乎可以肯定是「基础地址」填错了：要填到 /v1 为止，例如 https://llmway.ai/v1'];
+  if (/channel_circuit_open|circuit breaker/i.test(t)) return ['网关通道被限流了（不是你账号或设置的问题）', '上游把这个出口 IP 限流，一触发就整条通道熔断，探针恢复后才放行。等几分钟再点生成，或把「最多尝试次数」调大。'];
+  // ⛔ 渠道不可用 / 令牌未授权：重试完全没用，必须去站点侧处理（2026-09-18 实测两站都是这个）
+  if (/no available channel|可用渠道失败|暂无可用渠道|model_not_found/i.test(t)) {
+    return ['这个请求没有可用渠道（不是你账号或充值的问题）',
+      '两种可能：① 这条渠道正挂着；② **这个参数写法在该站点没有对应渠道** —— 实测 toapis 的「像素」和「比例」走的是不同渠道池，\n'
+      + '   所以页面会自动换另一种写法再试。若两种都失败，过一阵再试，或到站点的「令牌」页面确认模型权限。'];
+  }
+  if (/无权访问|no access to model/i.test(t)) {
+    return ['你的令牌没有这个模型的权限（403）',
+      '到站点的「令牌」页面编辑这个令牌，把「模型限制」放宽或设为不限，就能用它家其它的图像模型。\n'
+      + '（不少站点默认只给令牌勾一两个模型，恰好那一两个的渠道挂了，就会两个站点都出不了图。）'];
+  }
+  // ⛔ 参数类错误：重试没用，必须把网关原话摊给用户看（2026-09-18 踩过：500 invalid_request 被当成"上游不稳定"白重试了 8 次）
+  if (/invalid_request|cannot unmarshal|invalid value|unsupported|invalid_[a-z_]+/i.test(t)) {
+    return ['请求参数不被接受（重试没有用，要改参数）', '网关原话见下。这类错误是它校验请求体时报的，原样重发结果一样。'];
+  }
+  if (status === 401) return ['密钥无效或未授权（401）', '检查 API Key 是否复制完整、是否已过期。'];
+  if (status === 403) return ['这个 Key 无权访问该模型（403）', '到网关的「令牌」页面确认这个 Key 被授权了这个模型。'];
+  if (status === 404) return ['接口路径不存在（404）', '检查基础地址是不是多了或少了路径段。'];
+  if (status === 429) return ['被限流了（429）', '稍等再试。'];
+  if (status >= 500) return [`网关或上游错误（${status}）`, '多为上游通道不稳定，重试通常能恢复。'];
+  return [`请求失败（HTTP ${status}）`, t.slice(0, 800)];
+}
+
+/* ---------- 站点下拉：Key 与模型按站点分别记住，切换自动带出 ---------- */
+const SITE_PRESETS = [
+  { name: 'toapis.cn（国内）', base: 'https://toapis.cn/v1' },
+  { name: 'llmway.ai', base: 'https://llmway.ai/v1' },
+];
+function renderSiteSelect() {
+  const sel = $('#siteSelect');
+  const cur = trimBase(cfg.baseUrl);
+  const list = [...SITE_PRESETS];
+  for (const b of Object.keys(cfg.keysBySite || {})) {
+    if (!list.some((x) => trimBase(x.base) === trimBase(b))) list.push({ name: b.replace(/^https?:\/\//, ''), base: b });
+  }
+  sel.innerHTML = '';
+  for (const s of list) {
+    const o = document.createElement('option');
+    o.value = trimBase(s.base);
+    o.textContent = s.name;
+    sel.appendChild(o);
+  }
+  const oc = document.createElement('option');
+  oc.value = '__custom__';
+  oc.textContent = '其它站点 / 手动填写…';
+  sel.appendChild(oc);
+  sel.value = list.some((x) => trimBase(x.base) === cur) ? cur : '__custom__';
+  updateSiteHint();
+}
+function updateSiteHint() {
+  const n = Object.keys(cfg.keysBySite || {}).length;
+  $('#siteHint').textContent = n
+    ? `已记住 ${n} 个站点的 Key 与模型，切换时自动带出。`
+    : '第一次用某个站点时填一次 Key，之后会自动记住。';
+}
+/* 把当前站点的 Key / 模型记到该站点名下 */
+function rememberKey() {
+  const b = trimBase(cfg.baseUrl);
+  if (!b) return;
+  cfg.keysBySite = cfg.keysBySite || {};
+  cfg.modelBySite = cfg.modelBySite || {};
+  const k = $('#apiKey').value;
+  if (k) cfg.keysBySite[b] = k;
+  cfg.modelBySite[b] = cfg.model;
+}
+async function onSiteChange() {
+  const v = $('#siteSelect').value;
+  rememberKey();
+  if (v === '__custom__') { $('#baseUrl').focus(); $('#baseUrl').select(); return; }
+  cfg.baseUrl = v;
+  $('#baseUrl').value = v;
+  const savedKey = (cfg.keysBySite || {})[v] || '';
+  $('#apiKey').value = savedKey;
+  const savedModel = (cfg.modelBySite || {})[v];
+  if (savedModel) { cfg.model = savedModel; $('#modelLabel').textContent = savedModel; }
+  saveCfg(true);
+  updateSiteHint();
+  log(`已切到站点 ${v}` + (savedKey ? '（Key 自动填上了）' : '（这个站点还没有 Key，填一次就会记住）'), 's');
+  if (savedKey) await refreshModels(true);
+}
+/* 手动改了地址：把该站点上次的 Key 带出来 */
+function onBaseUrlEdited() {
+  const b = trimBase($('#baseUrl').value);
+  cfg.baseUrl = b;
+  const savedKey = (cfg.keysBySite || {})[b];
+  if (savedKey && savedKey !== $('#apiKey').value) {
+    $('#apiKey').value = savedKey;
+    log('这个站点上次的 Key 已自动填上', 's');
+  }
+  const savedModel = (cfg.modelBySite || {})[b];
+  if (savedModel && savedModel !== cfg.model) { cfg.model = savedModel; $('#modelLabel').textContent = savedModel; }
+  renderSiteSelect();
+  saveCfg(true);
+}
+
+/* ---------- 画布：图片多了才允许滚动，否则整张铺满 ---------- */
+function applyResultsLayout() {
+  const n = document.querySelectorAll('#results .card').length;
+  $('#results').classList.toggle('scroll', n > 4);
+}
+
+/* ---------- 抽屉 ---------- */
+function toggleDrawer(id, btn) {
+  const d = $('#' + id);
+  const willOpen = !d.classList.contains('open');
+  d.classList.toggle('open', willOpen);
+  btn.classList.toggle('on', willOpen);
+}
+function openDrawer(id) {
+  const map = { cfgDrawer: '#btnCfgToggle', logDrawer: '#btnLogToggle' };
+  const d = $('#' + id);
+  d.classList.add('open');
+  if (map[id]) $(map[id]).classList.add('on');
+}
+
+/* ---------- 浮层 ---------- */
+function closePops() {
+  $('#modelPop').classList.remove('open');
+  $('#paramPop').classList.remove('open');
+  $('#btnModel').classList.remove('on');
+  $('#btnParams').classList.remove('on');
+}
+function placePop(pop, anchor) {
+  const r = anchor.getBoundingClientRect();
+  pop.classList.add('open');
+  const pw = pop.offsetWidth, ph = pop.offsetHeight;
+  let left = r.left;
+  if (left + pw > innerWidth - 12) left = innerWidth - pw - 12;
+  pop.style.left = Math.max(12, left) + 'px';
+  pop.style.top = Math.max(12, r.top - ph - 10) + 'px';
+}
+
+/* ---------- 模型 / 参数 UI ---------- */
+function renderModelList() {
+  const box = $('#modelList');
+  box.innerHTML = '';
+  for (const m of MODELS) {
+    const d = document.createElement('div');
+    d.className = 'modelItem' + (cfg.model === m.id ? ' sel' : '');
+    d.innerHTML = `<span class="mi">✦</span><span><span class="mt">${m.id}</span><span class="md">${m.desc}</span></span>`
+      + (cfg.model === m.id ? '<span class="check">✓</span>' : '');
+    d.addEventListener('click', () => {
+      cfg.model = m.id;
+      $('#modelLabel').textContent = m.id;
+      renderModelList();
+      closePops();
+      saveCfg(true);
+    });
+    box.appendChild(d);
+  }
+}
+function renderRatioGrid() {
+  const box = $('#ratioGrid');
+  box.innerHTML = '';
+  for (const r of RATIOS) {
+    const d = document.createElement('div');
+    d.className = 'ratioItem' + (cfg.ratio === r.k ? ' sel' : '');
+    const gw = r.auto ? 12 : (r.w >= r.h ? 17 : Math.max(7, 17 * r.w / r.h));
+    const gh = r.auto ? 12 : (r.h >= r.w ? 17 : Math.max(7, 17 * r.h / r.w));
+    d.innerHTML = `<span class="box"><i style="width:${gw}px;height:${gh}px"></i></span><span>${r.k}</span>`;
+    d.addEventListener('click', () => { applyRatio(r.k); saveCfg(true); });
+    box.appendChild(d);
+  }
+}
+function renderSegRow(boxId, items, cur, onPick) {
+  const box = $('#' + boxId);
+  box.innerHTML = '';
+  for (const it of items) {
+    const d = document.createElement('div');
+    d.className = 'seg' + (cur === it.v ? ' sel' : '');
+    d.textContent = it.t;
+    d.addEventListener('click', () => { onPick(it.v); saveCfg(true); });
+    box.appendChild(d);
+  }
+}
+function renderParamUI() {
+  renderRatioGrid();
+  renderSegRow('resRow', RES.map((r) => ({ t: r.k, v: r.short })), cfg.res, (v) => { cfg.res = v; applyRatio(cfg.ratio); saveCfg(true); });
+  renderSegRow('nRow', [1, 2, 3, 4].map((n) => ({ t: String(n), v: n })), cfg.n, (v) => { cfg.n = v; renderParamUI(); updateParamLabel(); saveCfg(true); });
+  updateParamLabel();
+  updateSizeNote();
+}
+function currentSize() {
+  if (cfg.ratio === '__custom__') return cfg.sizeW + 'x' + cfg.sizeH;
+  const r = RATIOS.find((x) => x.k === cfg.ratio);
+  if (!r) return cfg.sizeW + 'x' + cfg.sizeH;   // 认不出的比例就用手填的宽高
+  if (r.auto) return 'auto';
+  return cfg.sizeW + 'x' + cfg.sizeH;
+}
+function applyRatio(key) {
+  cfg.ratio = key;
+  const r = RATIOS.find((x) => x.k === key);
+  const res = RES.find((x) => x.short === cfg.res) || RES[0];
+  if (r && !r.auto) {
+    const s = fitSize(r.w, r.h, res.edge);
+    cfg.sizeW = s.w; cfg.sizeH = s.h;
+    $('#sizeW').value = s.w; $('#sizeH').value = s.h;
+  }
+  renderParamUI();
+}
+function updateParamLabel() {
+  const res = RES.find((x) => x.short === cfg.res) || RES[0];
+  const g = $('#paramGlyph');
+  if (cfg.ratio === '__custom__') {
+    $('#paramLabel').textContent = `${cfg.sizeW}×${cfg.sizeH} · ${res.short} · ${cfg.n}`;
+    g.innerHTML = '<i style="width:15px;height:15px;border:1.6px dashed currentColor;border-radius:2px"></i>';
+    return;
+  }
+  const r = RATIOS.find((x) => x.k === cfg.ratio);
+  $('#paramLabel').textContent = `${cfg.ratio} · ${res.short} · ${cfg.n}`;
+  const gw = !r || r.auto ? 11 : (r.w >= r.h ? 15 : Math.max(6, 15 * r.w / r.h));
+  const gh = !r || r.auto ? 11 : (r.h >= r.w ? 15 : Math.max(6, 15 * r.h / r.w));
+  g.innerHTML = `<i style="width:${gw}px;height:${gh}px;border:1.6px solid currentColor;border-radius:2px"></i>`;
+}
+function updateSizeNote() {
+  const el = $('#sizeNote');
+  const size = currentSize();
+  if (size === 'auto') { el.className = 'sizeNote'; el.textContent = '智能：由模型自己决定尺寸。'; return; }
+  const [w, h] = size.split('x').map(Number);
+  const px = w * h, ratio = Math.max(w, h) / Math.min(w, h);
+  const bad = [];
+  if (w % 16 || h % 16) bad.push('边长要是 16 的倍数');
+  if (Math.max(w, h) > MAX_EDGE) bad.push('长边不能超过 3840');
+  if (ratio > 3) bad.push('长宽比不能超过 3:1');
+  if (px < MIN_PX) bad.push('像素太少');
+  if (px > MAX_PX) bad.push('像素太多');
+  el.className = 'sizeNote' + (bad.length ? ' bad' : '');
+  el.textContent = `${w} × ${h}（${(px / 1e6).toFixed(1)} 百万像素）`
+    + (bad.length ? ' ⚠ ' + bad.join('；') : ' ✓ 符合上游限制');
+}
+
+/* ============================================================
+   通用接口层 —— 换站点不用改别的东西
+   不同网关对 /v1 的要求不一样（toapis 要 /v1，有的站点根路径也行），
+   这里一律两个候选都试，谁通用谁。
+   ============================================================ */
+function baseCandidates(raw) {
+  const u = String(raw || '').trim().replace(/\/+$/, '');
+  if (!u) return [];
+  const out = [u];
+  if (/\/v\d+$/i.test(u)) out.push(u.replace(/\/v\d+$/i, ''));
+  else out.push(u + '/v1');
+  return [...new Set(out)];
+}
+const trimBase = (b) => String(b || '').replace(/\/+$/, '');
+const imageUrl = (base) => trimBase(base) + '/images/generations';
+const modelsUrl = (base) => trimBase(base) + '/models';
+// 路径不对的三个典型特征：404 / 405 / 干脆返回一个网页
+function looksLikeWrongPath(status, text) {
+  return status === 404 || status === 405 || String(text || '').trim().startsWith('<');
+}
+
+async function safeFetch(url, init, ms) {
+  try {
+    const r = await fetch(url, { ...init, signal: AbortSignal.timeout(ms || 20000) });
+    return { status: r.status, text: await r.text() };
+  } catch (e) {
+    log(`探测请求失败：${(e && e.message) || e}`, 'w');   // 别静默吞错，否则网络/环境问题会变成"自检莫名其妙不通"
+    return null;
+  }
+}
+
+/* 逐个候选基础地址试 /models，返回能用那一个 + 它列出的模型 */
+async function probeBase(quiet) {
+  const raw = $('#baseUrl').value.trim() || cfg.baseUrl;
+  const key = $('#apiKey').value || cfg.apiKey;
+  const cands = baseCandidates(raw);
+  if (!cands.length) return { ok: false, base: raw, ids: [], text: '接口地址是空的' };
+  let lastText = '';
+  for (const b of cands) {
+    const r = await safeFetch(modelsUrl(b), { headers: { Authorization: 'Bearer ' + key } }, 20000);
+    if (!r) continue;
+    // ⚠ 先判「路径不对」：有的站点根路径会返回 200 + 一个营销网页，
+    //   只看状态码会把首页当成可用的 API 地址。
+    if (looksLikeWrongPath(r.status, r.text)) {
+      lastText = `HTTP ${r.status}${String(r.text).trim().startsWith('<') ? '（返回的是网页，不是接口）' : ''}`;
+      if (!quiet) log(`路径不对，换一个候选：${b}`, 'w');
+      continue;
+    }
+    if (r.status === 200) {
+      let ids = [];
+      try { ids = (JSON.parse(r.text).data || []).map((m) => m.id).filter(Boolean); } catch { /* 有的站点不返回列表 */ }
+      return { ok: true, base: b, ids, text: r.text };
+    }
+    lastText = `HTTP ${r.status}：${r.text.slice(0, 200).replace(/\s+/g, ' ')}`;
+    return { ok: false, base: b, ids: [], status: r.status, text: lastText };   // 路径对但被拒（多半是 Key 问题）
+  }
+  return { ok: false, base: trimBase(cands[cands.length - 1]), ids: [], text: lastText || '两个候选路径都试过了，都不通' };
+}
+
+/* 已经验证过可用的基础地址：同一个地址不重复探测，换地址才重新试 */
+let baseVerified = '';
+
+/* 接口自检 + 拉模型列表 + 自动纠正地址 */
+let refreshSeq = 0;   // 防竞态：自检未返回时用户切了站点，旧结果必须丢弃
+async function refreshModels(quiet) {
+  readForm();
+  if (!cfg.baseUrl || !cfg.apiKey) {
+    if (!quiet) { setNotice('err', '先填好接口地址和 Key', ''); openDrawer('cfgDrawer'); }
+    return null;
+  }
+  const seq = ++refreshSeq;
+  const startedWith = trimBase(cfg.baseUrl);
+  if (!quiet) setState('自检中…', 'run');
+  const res = await probeBase(quiet);
+  if (seq !== refreshSeq || trimBase(cfg.baseUrl) !== startedWith) {
+    log('站点在自检期间被切换，这次结果已丢弃', 'i');
+    return res;
+  }
+  if (!res.ok) {
+    if (!quiet) {
+      const [t, d] = explain(res.status || 0, res.text || '');
+      setNotice('err', t, (res.status ? d + '\n\n' : '') + (res.text || ''));
+      setState('自检失败', 'err');
+    }
+    return res;
+  }
+  // 自动纠正地址（这是换站点最容易踩的坑）
+  if (trimBase(res.base) !== trimBase(cfg.baseUrl)) {
+    log(`接口地址已自动纠正为 ${res.base}`, 's');
+    cfg.baseUrl = res.base;
+    $('#baseUrl').value = res.base;
+  }
+  baseVerified = trimBase(cfg.baseUrl);
+  if (res.ids.length) {
+    MODELS = res.ids.map((id) => ({ id, desc: MODEL_NOTES[id] || '来自网关的模型列表' }));
+    if (!MODELS.some((m) => m.id === cfg.model)) {
+      const old = cfg.model;
+      cfg.model = MODELS[0].id;
+      $('#modelLabel').textContent = cfg.model;
+      log(`「${old}」在这个站点不存在，已自动切到「${cfg.model}」`, 'w');
+      if (!quiet) setNotice('warn', '已自动切换模型', `「${old}」不在这个网关的模型列表里；已切到「${cfg.model}」。`);
+    }
+    renderModelList();
+  }
+  saveCfg(true);
+  if (!quiet) {
+    setState('接口正常', 'ok');
+    setNotice('ok', '接口正常 ✓',
+      `实际请求地址：${imageUrl(cfg.baseUrl)}\n可用模型：${res.ids.length ? res.ids.join('、') : '（这个站点没返回模型列表，沿用当前选择）'}`);
+  }
+  return res;
+}
+
+/* ============================================================
+   异步任务制接口（有的站点 POST 只回任务号，要再轮询；如 toapis）
+   ============================================================ */
+function isTaskResponse(j) {
+  if (!j || typeof j !== 'object') return false;
+  if (j.object === 'generation.task') return true;
+  return typeof j.status === 'string' && !!j.id && !j.data && !j.output && !j.images;
+}
+
+/* 从各种可能的形态里把图片抽出来（各家字段名不统一） */
+function extractImages(j) {
+  const out = [];
+  const push = (o) => {
+    if (!o) return;
+    if (typeof o === 'string') { if (/^(https?:|data:)/.test(o)) out.push({ url: o }); return; }
+    if (o.b64_json) out.push({ b64_json: o.b64_json });
+    else if (o.url) out.push({ url: o.url });
+    else if (o.image_url) out.push({ url: o.image_url });
+    else if (o.image) out.push(typeof o.image === 'string' ? { url: o.image } : o.image);
+  };
+  const lists = [j.data, j.output, j.images, j.artifacts,
+    j.result && j.result.data, j.result && j.result.images, j.result && j.result.output];
+  for (const arr of lists) if (Array.isArray(arr)) arr.forEach(push);
+  if (!out.length && j.result) push(j.result);
+  if (!out.length) push(j);
+  return out;
+}
+
+/* 轮询任务直到完成 / 失败 / 超时 */
+async function pollTask(base, taskId, onTick) {
+  const url = imageUrl(base) + '/' + encodeURIComponent(taskId);
+  const deadline = Date.now() + Math.max(1, cfg.timeoutMin) * 60000;
+  let last = null;
+  let waited = 0;
+  while (Date.now() < deadline) {
+    await sleep(3000);
+    waited += 3;
+    const r = await safeFetch(url, { headers: { Authorization: 'Bearer ' + cfg.apiKey } }, 30000);
+    if (!r) continue;
+    let j = null;
+    try { j = JSON.parse(r.text); } catch { continue; }
+    last = j;
+    if (onTick) onTick(j);
+    const st = String(j.status || '').toLowerCase();
+    if (['completed', 'succeeded', 'success', 'done'].includes(st)) return j;
+    if (['failed', 'error', 'canceled', 'cancelled'].includes(st)) return j;
+    if (waited % 15 === 0) log(`  任务仍在进行（${st || '?'}${Number.isFinite(Number(j.progress)) ? ' ' + j.progress + '%' : ''}，已等 ${waited}s）`, 'i');
+  }
+  return last;
+}
+
+/* ============================================================
+   图片保存：优先直接写进你选的文件夹（File System Access API），
+   不行就退回浏览器的「下载」。文件夹句柄存在 IndexedDB 里，下次不用重选。
+   ============================================================ */
+let dirHandle = null;
+const FSA_OK = (typeof window !== 'undefined') && (typeof window.showDirectoryPicker === 'function');
+
+const DB_NAME = 'imgstudio', DB_VER = 2;
+function idbOpen() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, DB_VER);
+    r.onupgradeneeded = () => {
+      const db = r.result;
+      if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+      // v2 新增：资产库（v1 的老库会在这里自动补上，原来的 kv 不动）
+      if (!db.objectStoreNames.contains('assets')) {
+        const st = db.createObjectStore('assets', { keyPath: 'key' });
+        // 索引建不上也不能让升级失败（升级失败 = 连保存文件夹都恢复不了）
+        try { st.createIndex('ts', 'ts'); st.createIndex('model', 'model'); } catch { /* 有 keyPath 就够用 */ }
+      }
+    };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+    // 另一个标签页还开着旧版页面时，升级会被挡住 —— 明确报错，别让页面卡在"永远等待"上
+    r.onblocked = () => rej(new Error('数据库被另一个标签页占用：请关掉其它打开着本页面的标签页，然后刷新'));
+  });
+}
+/* 通用请求：跑完一个事务再取结果（getAll 这类必须等事务完成才拿得到数据） */
+function idbReq(store, mode, fn) {
+  return idbOpen().then((db) => new Promise((res, rej) => {
+    let out;
+    const tx = db.transaction(store, mode);
+    const rq = fn(tx.objectStore(store));
+    if (rq) rq.onsuccess = () => { out = rq.result; };
+    tx.oncomplete = () => res(out);
+    tx.onerror = () => rej(tx.error);
+    tx.onabort = () => rej(tx.error);
+  }));
+}
+async function idbSet(k, v) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put(v, k);
+    tx.oncomplete = () => res(true);
+    tx.onerror = () => rej(tx.error);
+  });
+}
+async function idbGet(k) {
+  const db = await idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('kv', 'readonly');
+    const rq = tx.objectStore('kv').get(k);
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  });
+}
+
+function updateDirLabel() {
+  const el = $('#dirLabel'), hint = $('#saveHint');
+  if (dirHandle) {
+    el.textContent = '已选：' + dirHandle.name;
+    hint.textContent = '生成的图会直接写进这个文件夹。若浏览器要权限，点一次「允许」即可。';
+  } else if (FSA_OK) {
+    el.textContent = '未选择（暂用浏览器「下载」）';
+    hint.textContent = '选一个文件夹后，图片会直接写进去，不再需要手动点下载。'
+      + '推荐固定选同一个图片文件夹（资产库据此扫描重建索引）。';
+  } else {
+    el.textContent = '当前浏览器不支持直接写文件夹';
+    hint.textContent = '会用浏览器的「下载」。可把浏览器下载目录设成工作空间的 生成图 文件夹，效果一样。';
+  }
+}
+async function restoreDir() {
+  updateDirLabel();
+  if (!FSA_OK) return;
+  try {
+    const h = await idbGet('saveDir');
+    if (h) { dirHandle = h; updateDirLabel(); log('已恢复上次选的保存文件夹：' + h.name, 's'); }
+  } catch (e) {
+    // 常见原因：另一个标签页还开着旧版页面，IndexedDB 升级被挡住
+    log('保存文件夹没恢复成功（会先退回「下载」）：' + ((e && e.message) || e), 'w');
+  }
+}
+async function pickFolder() {
+  if (!FSA_OK) {
+    setNotice('warn', '这个浏览器不支持直接写文件夹', '会用「下载」保存。也可以把浏览器下载目录设为工作空间的 生成图 文件夹。');
+    return;
+  }
+  try {
+    const h = await window.showDirectoryPicker({ id: 'imgstudio-save', mode: 'readwrite' });
+    let p = await h.queryPermission({ mode: 'readwrite' });
+    if (p !== 'granted') p = await h.requestPermission({ mode: 'readwrite' });
+    if (p !== 'granted') { setNotice('warn', '没有拿到写入权限', '再点一次「选择保存文件夹」，在弹窗里点「允许」。'); return; }
+    dirHandle = h;
+    await idbSet('saveDir', h);
+    updateDirLabel();
+    setNotice('ok', '保存文件夹已设定 ✓', '以后生成的图片会自动写进：' + h.name);
+    log('保存文件夹：' + h.name, 's');
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;      // 用户自己取消，不报错
+    setNotice('err', '选择文件夹失败', ((e && e.message) || '') +
+      '\n\n可能原因：页面是用 file:// 双击打开的，浏览器不允许它直接写文件夹。' +
+      '可以改用「下载」，或把浏览器下载目录设成工作空间的 生成图 文件夹。');
+  }
+}
+async function writeToFolder(name, blob) {
+  if (!dirHandle) return false;
+  try {
+    let p = await dirHandle.queryPermission({ mode: 'readwrite' });
+    if (p !== 'granted') p = await dirHandle.requestPermission({ mode: 'readwrite' });
+    if (p !== 'granted') { log('没有文件夹写入权限，改用下载', 'w'); return false; }
+    const fh = await dirHandle.getFileHandle(name, { create: true });
+    const w = await fh.createWritable();
+    await w.write(blob);
+    await w.close();
+    return true;
+  } catch (e) { log('写入文件夹失败（改用下载）：' + ((e && e.message) || ''), 'w'); return false; }
+}
+function triggerDownload(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+function fileNameFor(dims, body, ext) {
+  return `${stamp()}-${body.model}${dims ? '-' + dims.w + 'x' + dims.h : ''}.${ext || 'png'}`;
+}
+/* 按真实格式决定扩展名（实测：toapis 的 gemini 模型返回的是 JPEG，不是 PNG） */
+async function extFromBlob(blob) {
+  const t = ((blob && blob.type) || '').toLowerCase();
+  if (/jpe?g/.test(t)) return 'jpg';
+  if (/webp/.test(t)) return 'webp';
+  if (/png/.test(t)) return 'png';
+  try {
+    const h = new Uint8Array(await blob.slice(0, 12).arrayBuffer());
+    if (h[0] === 0xff && h[1] === 0xd8) return 'jpg';
+    if (h[0] === 0x89 && h[1] === 0x50) return 'png';
+    if (h[8] === 0x57 && h[9] === 0x45 && h[10] === 0x42 && h[11] === 0x50) return 'webp';
+  } catch { /* 读不到就按 png */ }
+  return 'png';
+}
+/* 自动存盘：能写文件夹就写，不能就触发下载（按真实格式命名）；存完顺手记进资产库 */
+async function autoSaveImage(src, dims, body, meta) {
+  try {
+    const blob = await (await fetch(src)).blob();
+    const name = fileNameFor(dims, body, await extFromBlob(blob));
+    if (await writeToFolder(name, blob)) {
+      log('已存入文件夹：' + name, 's');
+      recordAsset(blob, name, dims, body, { ...(meta || {}), how: 'folder' }).catch(() => {});
+      return 'folder';
+    }
+    triggerDownload(blob, name);
+    log('已下载：' + name, 's');
+    recordAsset(blob, name, dims, body, { ...(meta || {}), how: 'download' }).catch(() => {});
+    return 'download';
+  } catch (e) {
+    log('自动保存失败，改为新标签页打开：' + ((e && e.message) || ''), 'w');
+    window.open(src, '_blank');
+    return 'open';
+  }
+}
+
+/* ============================================================
+   参考图（图生图）：本地图 → 先上传拿 URL → 再随生成请求发出
+   toapis 不接受 base64，必须走 POST {基础地址}/uploads/images（multipart）
+   ============================================================ */
+let refItems = [];        // { id, file, url, thumb }
+let activeRefUrls = [];   // 本次生成实际要带的参考图 URL
+
+/* 各模型的参考图上限（按官方文档，2026-09-18 核实） */
+function refLimit() {
+  const m = cfg.model || '';
+  if (/-vip$/i.test(m) || /official/i.test(m)) return 14;   // gemini VIP / Official
+  if (/^gemini/i.test(m)) return 6;                          // gemini 普通版
+  if (/^gpt-image/i.test(m)) return 6;                       // gpt-image 系列（toapis 路由）
+  return 6;
+}
+function refLimitNote() {
+  const m = cfg.model || '';
+  if (/-vip$/i.test(m) || /official/i.test(m)) return `这个模型最多 ${refLimit()} 张参考图`;
+  if (/^gemini/i.test(m)) return 'gemini 普通版最多 6 张（要 14 张得用带 -vip 的版本）';
+  if (/^gpt-image/i.test(m)) return 'gpt-image 在 toapis 这条路由上最多 6 张（OpenAI 原生接口才是 16）';
+  return `最多 ${refLimit()} 张参考图`;
+}
+function renderRefs() {
+  const strip = $('#refStrip');
+  strip.innerHTML = '';
+  for (const it of refItems) {
+    const d = document.createElement('div');
+    d.className = 'refThumb';
+    const img = document.createElement('img');
+    img.src = it.thumb; img.alt = it.file.name; img.title = it.file.name;
+    d.appendChild(img);
+    const b = document.createElement('button');
+    b.className = 'del'; b.textContent = '×'; b.title = '移除这张';
+    b.addEventListener('click', () => { refItems = refItems.filter((x) => x !== it); renderRefs(); });
+    d.appendChild(b);
+    strip.appendChild(d);
+  }
+  const lim = refLimit();
+  $('#refCount').textContent = refItems.length ? `${refItems.length} / ${lim}` : '';
+  $('#refCount').className = 'hint' + (refItems.length > lim ? ' warn' : '');
+  $('#refHint').textContent = refItems.length
+    ? '生成时自动上传；' + refLimitNote()
+    : '图生图用：可多张，也能直接拖进来或 Ctrl+V 粘贴';
+}
+function addRefFiles(files) {
+  const lim = refLimit();
+  const okType = /^image\/(png|jpeg|webp|gif)$/i;
+  const skipped = [];
+  let added = 0;
+  for (const f of files) {
+    if (refItems.length >= lim) { skipped.push(`${f.name || '图片'} —— 超过上限 ${lim} 张`); continue; }
+    if (!okType.test(f.type)) { skipped.push(`${f.name || '图片'} —— 格式不支持（只能 png / jpg / webp / gif）`); continue; }
+    if (f.size > 10 * 1024 * 1024) { skipped.push(`${f.name || '图片'} —— ${(f.size / 1048576).toFixed(1)}MB，超过 10MB`); continue; }
+    refItems.push({ id: Math.random().toString(36).slice(2), file: f, url: '', thumb: URL.createObjectURL(f) });
+    added++;
+  }
+  renderRefs();
+  if (skipped.length) setNotice('warn', '有图片没能加进来', skipped.join('\n'));
+  if (added) log(`已加入 ${added} 张参考图`, 'i');
+}
+/* 逐张上传（已上传过的复用 URL，不重复上传） */
+async function uploadRefs() {
+  if (!refItems.length) return [];
+  const base = trimBase(cfg.baseUrl);
+  const out = [];
+  for (let i = 0; i < refItems.length; i++) {
+    const it = refItems[i];
+    if (it.url) { out.push(it.url); continue; }
+    setState(`上传参考图 ${i + 1}/${refItems.length}…`, 'run');
+    const fd = new FormData();
+    fd.append('file', it.file, it.file.name || 'image.png');
+    let r = null;
+    try {
+      r = await fetch(base + '/uploads/images', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + cfg.apiKey },
+        body: fd,
+        signal: AbortSignal.timeout(180000),
+      });
+    } catch (e) {
+      setNotice('err', '参考图上传失败', ((e && e.message) || '') + '\n\n可能是网络问题，或这个站点没有上传接口。');
+      return null;
+    }
+    const text = await r.text();
+    if (r.status !== 200) {
+      setNotice('err', `参考图上传失败（HTTP ${r.status}）`,
+        text.slice(0, 300) + `\n\n上传接口是 POST ${base}/uploads/images（toapis 有）。换到别的站点时可能不支持参考图。`);
+      return null;
+    }
+    let j = null;
+    try { j = JSON.parse(text); } catch { /* ignore */ }
+    const url = j && j.data && j.data.url;
+    if (!url) { setNotice('err', '上传成功但没拿到图片 URL', text.slice(0, 300)); return null; }
+    it.url = url;
+    log(`参考图 ${i + 1} 已上传：${url}`, 's');
+    out.push(url);
+  }
+  return out;
+}
+/* 把参考图挂到请求体上（gemini 用 image_urls，gpt-image 用 reference_images） */
+function attachRefs(body) {
+  if (!activeRefUrls.length) return body;
+  if (/gemini/i.test(cfg.model)) body.image_urls = activeRefUrls.slice();
+  else body.reference_images = activeRefUrls.slice();
+  return body;
+}
+
+/* ---------- 生图 ---------- */
+let running = false, abortCtrl = null, startedAt = 0, timer = null;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function startTimer() {
+  startedAt = Date.now();
+  clearInterval(timer);
+  timer = setInterval(() => { $('#elapsed').textContent = ((Date.now() - startedAt) / 1000).toFixed(1) + 's'; }, 100);
+}
+function stopTimer() { clearInterval(timer); timer = null; }
+
+function buildBody(style) {
+  readForm();
+  const body = { model: cfg.model, prompt: $('#prompt').value, n: Number(cfg.n) || 1 };
+  Object.assign(body, sizeFields(style || effectiveStyle()));
+  attachRefs(body);
+  if (cfg.quality) body.quality = cfg.quality;
+  if (cfg.responseFormat) body.response_format = cfg.responseFormat;
+  if (cfg.outputFormat) body.output_format = cfg.outputFormat;
+  if (cfg.extra) {
+    let parsed;
+    try { parsed = JSON.parse(cfg.extra); }
+    catch (e) { throw new Error('「附加 JSON 字段」不是合法的 JSON：' + e.message); }
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) Object.assign(body, parsed);
+    else throw new Error('「附加 JSON 字段」必须是一个对象，例如 {"moderation":"low"}');
+  }
+  return body;
+}
+
+async function generate() {
+  if (running) return;
+  const prompt = $('#prompt').value.trim();
+  if (!prompt) { setNotice('err', '还没有写提示词', '在下面的输入框里描述一下你想生成的画面。'); return; }
+  readForm();
+  if (!cfg.apiKey) { setNotice('err', '还没有填 API Key', '点右上角「⚙ 接口设置」，填入密钥后点保存。'); openDrawer('cfgDrawer'); return; }
+  if (!cfg.baseUrl) { setNotice('err', '还没有填接口地址', '例如 https://llmway.ai/v1'); openDrawer('cfgDrawer'); return; }
+
+  // 参考图：先上传拿 URL（toapis 不接受 base64）
+  activeRefUrls = [];
+  if (refItems.length) {
+    const urls = await uploadRefs();
+    if (!urls) { setState('待命', ''); return; }
+    activeRefUrls = urls;
+    log(`本次带 ${urls.length} 张参考图`, 'i');
+  }
+
+  const styles = styleChain();
+  let si = 0;
+  let body;
+  try { body = buildBody(styles[si]); }
+  catch (e) { setNotice('err', '参数有误', e.message); return; }
+  if (styles.length > 1) log(`尺寸写法：${STYLE_LABEL[styles[si]]}（被拒会自动换下一种）`, 'i');
+
+  // 生图前先用只读接口把「基础地址」试对 —— 换站点最常见的坑就是少了 /v1。
+  // 这一步只请求 /models，不产生生图、不花钱；同一个地址只探一次。
+  if (trimBase(cfg.baseUrl) !== baseVerified) await refreshModels(true);
+
+  saveCfg(true);
+  clearNotice();
+  running = true;
+  $('#btnGen').classList.add('stop');
+  $('#btnGen').textContent = '■';
+  $('#btnGen').title = '停止';
+  startTimer();
+  setState('生成中…', 'run');
+
+  const cands = baseCandidates(cfg.baseUrl);
+  let ci = 0;
+  const maxAttempts = Math.max(1, cfg.maxAttempts);
+  log(`POST ${imageUrl(cands[ci])}`, 'i');
+  log('请求体: ' + JSON.stringify({ ...body, prompt: body.prompt.slice(0, 50) + (body.prompt.length > 50 ? '…' : '') }), 'i');
+
+  let done = false, lastRetryable = false, timeoutRetries = 0;
+  for (let attempt = 1; attempt <= maxAttempts && !done; attempt++) {
+    $('#attemptText').textContent = `第 ${attempt}/${maxAttempts} 次尝试`;
+    abortCtrl = new AbortController();
+    const timeoutId = setTimeout(() => abortCtrl.abort('timeout'), cfg.timeoutMin * 60000);
+    try {
+      const res = await fetch(imageUrl(cands[ci]), {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + cfg.apiKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body), signal: abortCtrl.signal,
+      });
+      clearTimeout(timeoutId);
+      const text = await res.text();
+      const secs = ((Date.now() - startedAt) / 1000).toFixed(1);
+
+      if (res.status === 200) {
+        let json;
+        try { json = JSON.parse(text); }
+        catch { setNotice('err', '返回的不是合法数据', text.slice(0, 500)); log('解析返回失败', 'e'); break; }
+
+        // 有的站点是「异步任务制」：POST 只返回任务号，要再轮询取结果
+        if (isTaskResponse(json)) {
+          log(`这个站点是异步任务制，任务号 ${json.id}，开始轮询…`, 'i');
+          setState('排队 / 生成中…', 'run');
+          const done = await pollTask(cands[ci], json.id, (j) => {
+            const p = Number(j.progress);
+            $('#attemptText').textContent = `任务 ${j.status || '?'}${Number.isFinite(p) ? ' ' + p + '%' : ''}`;
+            setState(`生成中… ${Number.isFinite(p) ? p + '%' : ''}`, 'run');
+          });
+          if (!done) {
+            setNotice('err', '任务超时未完成', `超过 ${cfg.timeoutMin} 分钟仍没拿到结果。可以稍后在网关后台查这个任务号：${json.id}`);
+            setState('超时', 'err'); break;
+          }
+          const st = String(done.status || '').toLowerCase();
+          if (st === 'failed' || st === 'error' || st === 'canceled') {
+            // 任务失败也可能是尺寸写法不对（走错了渠道）→ 还有别的写法就先试
+            if (si < styles.length - 1) {
+              si++;
+              try { body = buildBody(styles[si]); } catch { /* 保持 */ }
+              log(`任务失败，改试另一种尺寸写法：${STYLE_LABEL[styles[si]]}`, 'w');
+              setNotice('warn', '这个写法失败了，正在换另一种再试',
+                `「${STYLE_LABEL[styles[si - 1]]}」的任务失败了，改试「${STYLE_LABEL[styles[si]]}」。`);
+              attempt--;
+              continue;
+            }
+            const msg = (done.error && done.error.message) || JSON.stringify(done.error || done).slice(0, 300);
+            log('任务失败：' + JSON.stringify(done).slice(0, 400), 'e');
+            const noToken = /no active token/i.test(msg);
+            setNotice('err', noToken ? '网关的上游没有可用额度' : '网关说这个任务失败了',
+              '网关原话：' + msg + (noToken
+                ? '\n\n这不是你的设置问题——网关自己那头上游没 token 了。换个站点或过一阵再试。'
+                : ''));
+            setState(noToken ? '上游无额度' : '任务失败', 'err');
+            break;
+          }
+          log(`任务完成（${done.progress ?? 100}%），开始取图`, 's');
+          json = done;
+        }
+
+        const items = extractImages(json);
+        if (!items.length) {
+          log('返回结构未识别：' + JSON.stringify(json).slice(0, 600), 'e');
+          setNotice('err', '没从返回里找到图片',
+            '返回的字段：' + Object.keys(json).join('、') + '\n\n' + JSON.stringify(json).slice(0, 400));
+          setState('返回结构不认识', 'err'); break;
+        }
+
+        log(`成功：${secs}s，返回 ${items.length} 张`, 's');
+        // 记住「这个站点的这个模型」用哪种尺寸写法（换站点 / 换模型都不用手动试）
+        if (cfg.paramStyle === 'auto') {
+          cfg.styleByModel = cfg.styleByModel || {};
+          if (cfg.styleByModel[styleKey()] !== styles[si]) {
+            cfg.styleByModel[styleKey()] = styles[si];
+            saveCfg(true);
+            log(`已记住 ${cfg.model} 的尺寸写法：${STYLE_LABEL[styles[si]]}`, 's');
+          }
+        }
+        // 如果是靠兜底换路径才成功的，把可用的地址写回去，下次不用再试
+        if (ci > 0 && trimBase(cands[ci]) !== trimBase(cfg.baseUrl)) {
+          cfg.baseUrl = cands[ci];
+          $('#baseUrl').value = cfg.baseUrl;
+          saveCfg(true);
+          log('已把可用的接口地址写回：' + cfg.baseUrl, 's');
+        }
+        if (json.usage) log('用量: ' + JSON.stringify(json.usage), 'i');
+        if (json.usage && json.usage.output_tokens) {
+          $('#costHint').textContent = `上次 ${json.usage.output_tokens} tokens`;
+        }
+        clearResultsIfFirst(attempt);
+        for (const it of items) {
+          const src = it.b64_json ? 'data:image/png;base64,' + it.b64_json : (it.url || null);
+          if (src) await addCard(src, it, body, secs, json);
+        }
+        setState('完成', 'ok');
+        done = true;
+        break;
+      }
+
+      log(`HTTP ${res.status}（${secs}s）：${text.slice(0, 260).replace(/\s+/g, ' ')}`, 'e');
+
+      // 兜底：路径不对时立刻换另一个候选（不等待、不占用重试次数）
+      if (looksLikeWrongPath(res.status, text) && ci < cands.length - 1) {
+        ci++;
+        log(`路径不对，改试 ${imageUrl(cands[ci])}`, 'w');
+        setNotice('warn', '接口路径不对，正在自动换一个', '换站点后常见：有的网关要在地址后面带 /v1。页面会自己试出来。');
+        attempt--;
+        continue;
+      }
+
+      const [title, detail] = explain(res.status, text);
+      // 参数类错误重试没用：别浪费 8 次机会去撞同一堵墙
+      const isParam = /invalid_request|cannot unmarshal|invalid value|unsupported|invalid_[a-z_]+/i.test(text);
+      // 渠道不可用 / 令牌未授权：重试本身没用（但可能是"这个写法没渠道"，见下面换写法）
+      const isDeadEnd = /no available channel|可用渠道失败|暂无可用渠道|model_not_found|无权访问|no access to model/i.test(text);
+      const isAuth = res.status === 401 || res.status === 403 || /无权访问|no access to model|invalid token|unauthorized/i.test(text);
+      const retryable = !isParam && !isDeadEnd && (res.status === 429 || res.status >= 500);
+
+      // ⭐ 换尺寸写法：实测 toapis 的「像素」和「比例」走的是**不同的渠道池**——
+      //    像素写法会报"没有可用渠道"，而比例写法能用。所以除了"被拒"，
+      //    "无渠道 / 任务失败 / 4xx5xx" 也要换写法再试，否则会漏掉能用的那种。
+      if (!isAuth && si < styles.length - 1 && (isParam || isDeadEnd || res.status >= 400 || looksLikeSizeComplaint(text))) {
+        si++;
+        try { body = buildBody(styles[si]); } catch { /* 保持原 body */ }
+        log(`「${STYLE_LABEL[styles[si - 1]]}」没走通（HTTP ${res.status}），改试「${STYLE_LABEL[styles[si]]}」`, 'w');
+        setNotice('warn', '这个尺寸写法没走通，正在换另一种',
+          `「${STYLE_LABEL[styles[si - 1]]}」被拒或被限流，改试「${STYLE_LABEL[styles[si]]}」。\n（同一站点不同写法可能走不同渠道，所以都要试一遍。）`);
+        attempt--;
+        continue;
+      }
+      lastRetryable = retryable;
+      const isBreaker = /channel_circuit_open|circuit breaker/i.test(text);
+      const upstream = (text.match(/"message"\s*:\s*"([^"]{0,200})"/) || [])[1] || '';
+      const why = upstream ? `\n\n网关原话：${upstream}` : '';
+
+      if (retryable && cfg.autoRetry && attempt < maxAttempts) {
+        const m = text.match(/auto-recovery probe in ~(\d+)s/);
+        const wait = m ? (Number(m[1]) + 8) * 1000 : (isBreaker ? 30000 : 20000);
+        setNotice('warn', title, (detail ? detail + '\n' : '') + why + `\n\n第 ${attempt}/${maxAttempts} 次失败，${(wait / 1000).toFixed(0)} 秒后自动重试。`);
+        setState(`被网关限流（${attempt}/${maxAttempts}）`, 'run');
+        await sleep(wait);
+        continue;
+      }
+      if (isParam || isDeadEnd) {
+        setNotice('err', title, (detail ? detail + '\n' : '') + why);
+        setState(isDeadEnd ? '这个模型不可用' : '参数错误', 'err');
+        break;
+      }
+      setNotice('err', title, (detail ? detail + '\n' : '') + why + (retryable
+        ? `\n\n已重试 ${attempt}/${maxAttempts} 次仍失败。这不是你的设置问题——网关的上游通道被限流了。过几分钟再点生成通常就能成功；也可以把「最多尝试次数」调大。`
+        : ''));
+      setState(isBreaker ? '被网关限流' : '失败', 'err');
+      break;
+
+    } catch (e) {
+      clearTimeout(timeoutId);
+      if (e && e.name === 'AbortError') {
+        const reason = abortCtrl && abortCtrl.signal.reason;
+        if (reason === 'timeout') {
+          log(`超过 ${cfg.timeoutMin} 分钟被中止`, 'e');
+          // 网关「挂死」（不返回、也不是快速报错）时不要按 maxAttempts 一路重试，
+          // 否则 15 分钟 × 8 次 = 两小时。超时只允许再试一次。
+          if (cfg.autoRetry && attempt < maxAttempts && timeoutRetries < 1) {
+            timeoutRetries++;
+            setNotice('warn', '这次等太久了，再试一次', `单次上限 ${cfg.timeoutMin} 分钟已用完（超时只重试一次，避免你干等几小时）。`);
+            setState('等待重试…', 'run'); await sleep(5000); continue;
+          }
+          setNotice('err', '超时了', `单次上限 ${cfg.timeoutMin} 分钟，已用完${timeoutRetries ? '（并已重试过一次）' : ''}。\n\n`
+            + '多半是网关的上游通道卡住了——它不报错、也不返回。可以先用命令行确认：node dev/diagnose.mjs gen\n'
+            + '过一阵再试；或把「单次超时」调小，尽早失败重来。');
+          setState('超时', 'err'); break;
+        }
+        log('已手动停止', 'w');
+        setState('已停止', '');
+        break;
+      }
+      log('网络错误：' + (e && e.message), 'e');
+      lastRetryable = true;
+      if (cfg.autoRetry && attempt < maxAttempts) {
+        setNotice('warn', '网络错误，正在重试', (e && e.message) + `\n\n第 ${attempt + 1}/${maxAttempts} 次。`);
+        setState('等待重试…', 'run');
+        await sleep(5000);
+        continue;
+      }
+      setNotice('err', '网络错误', String(e && e.message)); setState('失败', 'err'); break;
+    }
+  }
+
+  stopTimer();
+  running = false; abortCtrl = null;
+  $('#btnGen').classList.remove('stop');
+  $('#btnGen').textContent = '↑';
+  $('#btnGen').title = '生成（Ctrl+Enter）';
+  if (!done && lastRetryable) $('#attemptText').textContent = '重试已用尽';
+  else if (done) $('#attemptText').textContent = '待命';
+}
+
+/* 第一次尝试就清空上一批结果；重试时保留现场 */
+function clearResultsIfFirst(attempt) {
+  if (attempt === 1) {
+    const box = $('#results');
+    box.innerHTML = '';
+    applyResultsLayout();
+  }
+}
+
+function pngDims(src) {
+  return new Promise((res) => {
+    let settled = false;
+    const done = (v) => { if (!settled) { settled = true; res(v); } };
+    const img = new Image();
+    img.onload = () => done({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => done(null);
+    setTimeout(() => done(null), 8000);
+    img.src = src;
+  });
+}
+
+async function addCard(src, item, body, secs, json) {
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  const img = document.createElement('img');
+  img.src = src; img.alt = '生成结果';
+  img.addEventListener('click', () => { $('#viewerImg').src = src; $('#viewer').classList.add('on'); });
+  card.appendChild(img);
+
+  const dims = await pngDims(src);
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  const left = document.createElement('span');
+  left.textContent = dims ? `${dims.w} × ${dims.h}` : ((json && json.size) || '尺寸未知');
+  const right = document.createElement('span');
+  right.className = 'dim';
+  right.textContent = `${(json && json.model) || body.model} · ${secs}s`;
+  meta.append(left, right);
+  card.appendChild(meta);
+
+  const ops = document.createElement('div');
+  ops.className = 'ops';
+
+  const b1 = document.createElement('button');
+  b1.className = 'btn primary'; b1.textContent = '下载 PNG';
+  b1.addEventListener('click', () => downloadOne(src, dims, body));
+  ops.appendChild(b1);
+
+  const b2 = document.createElement('button');
+  b2.className = 'btn'; b2.textContent = '复制提示词';
+  b2.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(body.prompt); b2.textContent = '已复制 ✓'; }
+    catch { b2.textContent = '复制失败'; }
+    setTimeout(() => (b2.textContent = '复制提示词'), 1400);
+  });
+  ops.appendChild(b2);
+
+  const b3 = document.createElement('button');
+  b3.className = 'btn'; b3.textContent = '再生成一张';
+  b3.addEventListener('click', () => generate());
+  ops.appendChild(b3);
+
+  card.appendChild(ops);
+  $('#results').appendChild(card);
+  applyResultsLayout();
+  // 自动存盘（写文件夹失败就退回下载）；同时把这单的元信息记进资产库
+  if (cfg.autoSave) {
+    const how = await autoSaveImage(src, dims, body, {
+      secs,
+      usage: (json && json.usage) || null,
+      refs: activeRefUrls.length,
+      refThumbs: refItems.map((r) => r.thumb).slice(0, 6),
+    });
+    if (how !== 'folder' && how !== 'download') log('这张图没能自动存盘，请手动右键另存', 'w');
+  }
+}
+
+function stamp() { return new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19); }
+async function downloadOne(src, dims, body) {
+  try {
+    const blob = await (await fetch(src)).blob();
+    const name = fileNameFor(dims, body, await extFromBlob(blob));
+    triggerDownload(blob, name);
+    log('已下载 ' + name, 's');
+  } catch {
+    window.open(src, '_blank');
+    log('浏览器不允许直接下载，已在新标签页打开，请右键另存', 'w');
+  }
+}
+async function downloadAll() {
+  const imgs = [...document.querySelectorAll('#results .card img')];
+  if (!imgs.length) { setNotice('warn', '还没有图片可下载', ''); return; }
+  log(`开始下载 ${imgs.length} 张…`, 'i');
+  for (const im of imgs) { await downloadOne(im.src, null, { model: cfg.model }); await sleep(400); }
+}
+
+async function testConn() { await refreshModels(false); }
+
+/* ============================================================
+   资产库：把生成过的图连同「提示词 / 参数 / 参考图」一起记下来
+   - 记录存在浏览器 IndexedDB（imgstudio.assets），缩略图也在里面
+   - 存进文件夹的图，旁边会多写一份同名 .json 说明（换电脑可「重建索引」找回信息）
+   ============================================================ */
+let assetCache = null;     // 已加载的资产记录（按时间倒序）
+let assetSelKey = '';      // 详情面板当前选中的那条
+
+/* 把 blob 缩成指定大小的 JPEG dataURL（画布，用于缩略图和"当参考图"用） */
+async function makeThumbDataUrl(blob, max, q) {
+  if (typeof createImageBitmap !== 'function') return '';
+  const bmp = await createImageBitmap(blob);
+  const scale = Math.min(1, (max || 420) / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * scale));
+  const h = Math.max(1, Math.round(bmp.height * scale));
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  cv.getContext('2d').drawImage(bmp, 0, 0, w, h);
+  if (bmp.close) bmp.close();
+  return cv.toDataURL('image/jpeg', q || 0.82);
+}
+/* dataURL → File（"用作参考图"要把缩略图变回可上传的文件） */
+function dataUrlToFile(dataUrl, name) {
+  const parts = String(dataUrl).split(',');
+  const mime = ((parts[0] || '').match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+  const bin = atob(parts[1] || '');
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return new File([u8], name || 'ref.jpg', { type: mime });
+}
+async function assetLoadAll(force) {
+  if (assetCache && !force) return assetCache;
+  try { assetCache = (await idbReq('assets', 'readonly', (s) => s.getAll())) || []; }
+  catch (e) { assetCache = []; log('资产库读取失败（可能是浏览器隐私模式）：' + ((e && e.message) || e), 'w'); }
+  assetCache.sort((a, b) => b.ts - a.ts);
+  return assetCache;
+}
+const assetPut = (rec) => idbReq('assets', 'readwrite', (s) => s.put(rec));
+const assetDelete = (key) => idbReq('assets', 'readwrite', (s) => s.delete(key));
+
+/* 生成完一张图就记一条（失败不影响生图主流程） */
+async function recordAsset(blob, name, dims, body, meta) {
+  const m = meta || {};
+  const rec = {
+    key: name,
+    name,
+    ts: Date.now(),
+    prompt: body.prompt || '',
+    model: body.model || cfg.model || '',
+    size: body.size || '',
+    resolution: body.resolution || (body.metadata && body.metadata.resolution) || '',
+    quality: body.quality || '',
+    n: Number(body.n) || 1,
+    dims: dims ? { w: dims.w, h: dims.h } : null,
+    refs: m.refs || 0,
+    refThumbs: (m.refThumbs || []).slice(0, 6),
+    elapsed: m.secs || '',
+    usage: m.usage || null,
+    saved: m.how || '',
+    folder: dirHandle ? dirHandle.name : '',
+    thumb: '', mid: '',
+  };
+  try { rec.thumb = await makeThumbDataUrl(blob, 420, 0.8); } catch { /* 缩略图失败不影响主流程 */ }
+  try { rec.mid = await makeThumbDataUrl(blob, 1440, 0.85); } catch { /* 没有 mid 就用 thumb 顶 */ }
+  if (!rec.mid) rec.mid = rec.thumb;
+  try { await assetPut(rec); assetCache = null; } catch (e) { log('资产库写入失败：' + ((e && e.message) || e), 'w'); }
+  // 同名 .json 说明，放在图片旁边（只放文字，不放图，别把文件夹撑大）
+  if (dirHandle) {
+    try {
+      const side = { ...rec };
+      delete side.thumb; delete side.mid;
+      await writeToFolder(name + '.json', new Blob([JSON.stringify(side, null, 2)], { type: 'application/json' }));
+    } catch { /* 写不进就算了，主索引在 IndexedDB 里 */ }
+  }
+  // 面板开着就顺手刷新一下（没开不用管，下次打开会重新读）
+  if ($('#apPanel') && $('#apPanel').classList.contains('on')) renderAssets(false).catch(() => {});
+  return rec;
+}
+
+/* ---------- 分组 / 过滤 ---------- */
+function apFiltered() {
+  const kw = ($('#apSearch').value || '').trim().toLowerCase();
+  const md = $('#apModel').value;
+  const sort = $('#apSort').value;
+  let list = (assetCache || []).slice();
+  if (md) list = list.filter((r) => r.model === md);
+  if (kw) {
+    list = list.filter((r) => (r.prompt || '').toLowerCase().includes(kw)
+      || (r.name || '').toLowerCase().includes(kw) || (r.model || '').toLowerCase().includes(kw));
+  }
+  if (sort === 'old') list.sort((a, b) => a.ts - b.ts);
+  else if (sort === 'model') list.sort((a, b) => String(a.model || '').localeCompare(String(b.model || '')) || b.ts - a.ts);
+  else if (sort === 'big') list.sort((a, b) => ((b.dims ? b.dims.w * b.dims.h : 0) - (a.dims ? a.dims.w * a.dims.h : 0)) || b.ts - a.ts);
+  else list.sort((a, b) => b.ts - a.ts);
+  return list;
+}
+function dayLabel(ts) {
+  const d = new Date(ts), t = new Date();
+  const k = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((k(t) - k(d)) / 86400000);
+  if (diff <= 0) return '今天';
+  if (diff === 1) return '昨天';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function fmtClock(ts) {
+  const d = new Date(ts);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/* ---------- 面板渲染 ---------- */
+async function renderAssets(force) {
+  if (!$('#apGrid')) return;
+  await assetLoadAll(force);
+  const sel = $('#apModel'), cur = sel.value;
+  const models = [...new Set((assetCache || []).map((r) => r.model).filter(Boolean))].sort();
+  sel.innerHTML = '';
+  const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '全部模型'; sel.appendChild(o0);
+  for (const m of models) { const o = document.createElement('option'); o.value = m; o.textContent = m; sel.appendChild(o); }
+  sel.value = models.includes(cur) ? cur : '';
+
+  const list = apFiltered();
+  $('#apCount').textContent = (assetCache || []).length
+    ? (list.length === (assetCache || []).length ? `共 ${list.length} 张` : `${list.length} / ${(assetCache || []).length} 张`)
+    : '';
+
+  const grid = $('#apGrid');
+  grid.innerHTML = '';
+  if (!list.length) {
+    const e = document.createElement('div');
+    e.className = 'apEmpty';
+    e.textContent = (assetCache || []).length
+      ? '没有符合条件的图，换个关键词试试'
+      : '还没有记录。生成一张图（或点右上角「重建索引」从保存文件夹里找回）';
+    grid.appendChild(e);
+  }
+  let day = '', box = null;
+  for (const r of list) {
+    const dl = dayLabel(r.ts);
+    if (dl !== day) {
+      day = dl;
+      const h = document.createElement('div'); h.className = 'apDay'; h.textContent = dl;
+      grid.appendChild(h);
+      box = document.createElement('div'); box.className = 'apItems';
+      grid.appendChild(box);
+    }
+    const it = document.createElement('div');
+    it.className = 'apItem' + (r.key === assetSelKey ? ' sel' : '');
+    it.dataset.key = r.key;
+    const im = document.createElement('img');
+    im.src = r.thumb || r.mid || ''; im.alt = r.name || ''; im.loading = 'lazy';
+    it.appendChild(im);
+    const cap = document.createElement('div'); cap.className = 'cap';
+    const s1 = document.createElement('span'); s1.className = 'm'; s1.textContent = r.model || '未知模型';
+    const s2 = document.createElement('span'); s2.textContent = r.dims ? `${r.dims.w}×${r.dims.h}` : fmtClock(r.ts);
+    cap.append(s1, s2);
+    it.appendChild(cap);
+    it.title = (r.prompt || '').slice(0, 150);
+    it.addEventListener('click', () => { assetSelKey = r.key; syncAssetSel(); showAssetDetail(r.key); });
+    box.appendChild(it);
+  }
+  if (assetSelKey && list.some((r) => r.key === assetSelKey)) showAssetDetail(assetSelKey);
+  else if (assetSelKey) { assetSelKey = ''; showAssetDetail(''); }
+}
+function syncAssetSel() {
+  for (const el of document.querySelectorAll('#apGrid .apItem')) {
+    el.classList.toggle('sel', el.dataset.key === assetSelKey);
+  }
+}
+function apRow(box, k, v) {
+  const row = document.createElement('div'); row.className = 'apRow';
+  const a = document.createElement('span'); a.className = 'k'; a.textContent = k;
+  const b = document.createElement('span'); b.className = 'v'; b.textContent = v;
+  row.append(a, b); box.appendChild(row);
+}
+function showAssetDetail(key) {
+  const box = $('#apDetail');
+  if (!box) return;
+  box.innerHTML = '';
+  const r = (assetCache || []).find((x) => x.key === key);
+  if (!r) {
+    const e = document.createElement('div');
+    e.className = 'apEmpty';
+    e.textContent = '点左边任意一张图，这里显示它的提示词、参数和参考图';
+    box.appendChild(e);
+    return;
+  }
+  const img = document.createElement('img');
+  img.className = 'big'; img.src = r.mid || r.thumb || ''; img.alt = r.name || '';
+  box.appendChild(img);
+
+  apRow(box, '时间', new Date(r.ts).toLocaleString());
+  apRow(box, '模型', r.model || '—');
+  apRow(box, '尺寸', r.dims ? `${r.dims.w} × ${r.dims.h}` : (r.size || '未知'));
+  apRow(box, '尺寸写法', [r.size, r.resolution].filter(Boolean).join(' · ') || '—');
+  apRow(box, '质量 / 数量', [(r.quality || '默认'), (r.n || 1) + ' 张'].join(' · '));
+  apRow(box, '参考图', r.refs ? r.refs + ' 张' : '无');
+  apRow(box, '耗时', r.elapsed ? r.elapsed + ' s' : '—');
+  if (r.usage) apRow(box, '用量', JSON.stringify(r.usage));
+  apRow(box, '保存位置', r.saved === 'folder' ? '文件夹：' + (r.folder || '')
+    : r.saved === 'download' ? '浏览器下载' : '未自动存盘');
+  apRow(box, '文件名', r.name || '—');
+
+  if (r.refThumbs && r.refThumbs.length) {
+    const lab = document.createElement('div'); lab.className = 'apRow';
+    const k = document.createElement('span'); k.className = 'k'; k.textContent = '参考图';
+    lab.appendChild(k); box.appendChild(lab);
+    const strip = document.createElement('div'); strip.className = 'apRefs';
+    for (const t of r.refThumbs) {
+      const im = document.createElement('img'); im.src = t; im.alt = '参考图';
+      im.addEventListener('click', () => { $('#viewerImg').src = t; $('#viewer').classList.add('on'); });
+      strip.appendChild(im);
+    }
+    box.appendChild(strip);
+  }
+
+  const pl = document.createElement('div'); pl.className = 'apRow';
+  const pk = document.createElement('span'); pk.className = 'k'; pk.textContent = '提示词';
+  pl.appendChild(pk); box.appendChild(pl);
+  const pre = document.createElement('div'); pre.className = 'apPrompt'; pre.textContent = r.prompt || '（这条记录没存到提示词）';
+  box.appendChild(pre);
+
+  const ops = document.createElement('div'); ops.className = 'apOps';
+  const mk = (label, fn, primary) => {
+    const b = document.createElement('button');
+    b.className = 'btn' + (primary ? ' primary' : ''); b.textContent = label;
+    b.addEventListener('click', fn); ops.appendChild(b); return b;
+  };
+  mk('下载原图', () => downloadAsset(r), true);
+  mk('复制提示词', async (e) => {
+    const b = e.currentTarget;
+    try { await navigator.clipboard.writeText(r.prompt || ''); b.textContent = '已复制 ✓'; }
+    catch { b.textContent = '复制失败'; }
+    setTimeout(() => (b.textContent = '复制提示词'), 1400);
+  });
+  mk('用作参考图', () => useAsRef(r));
+  mk('套用参数再来一张', () => reuseAsset(r));
+  mk('删除记录', () => removeAsset(r));
+  box.appendChild(ops);
+}
+/* 下载：文件夹里有原图就读原图，否则下载库里存的中等图 */
+async function downloadAsset(r) {
+  if (r.saved === 'folder' && dirHandle) {
+    try {
+      const fh = await dirHandle.getFileHandle(r.name);
+      const f = await fh.getFile();
+      triggerDownload(f, r.name);
+      log('已从文件夹取回原图：' + r.name, 's');
+      return;
+    } catch { /* 文件被删/改名，退回下面的中等图 */ }
+  }
+  try {
+    const blob = await (await fetch(r.mid || r.thumb)).blob();
+    triggerDownload(blob, r.name || ('asset-' + r.ts + '.jpg'));
+    log('已下载资产库里的图（1440px 版本）', 's');
+  } catch (e) { log('下载失败：' + ((e && e.message) || e), 'w'); }
+}
+function useAsRef(r) {
+  const src = r.mid || r.thumb;
+  if (!src) { setNotice('warn', '这条记录没有可用的缩略图', '只能重新生成一张再当参考图。'); return; }
+  try {
+    const f = dataUrlToFile(src, (r.name || 'asset').replace(/\.[^.]+$/, '') + '-ref.jpg');
+    addRefFiles([f]);
+    $('#apPanel').classList.remove('on');
+    setNotice('ok', '已作为参考图加入 ✓', '在左侧参考图区可以看到它，直接点生成即可。');
+  } catch (e) { setNotice('err', '转成参考图失败', (e && e.message) || ''); }
+}
+function reuseAsset(r) {
+  cfg.model = r.model || cfg.model;
+  $('#modelLabel').textContent = cfg.model;
+  cfg.quality = r.quality || cfg.quality;
+  if (r.size && /^\d+:\d+$/.test(r.size)) cfg.ratio = r.size;
+  else if (r.dims) { cfg.ratio = '__custom__'; cfg.sizeW = r.dims.w; cfg.sizeH = r.dims.h; }
+  if (r.resolution && RES.some((x) => x.short === r.resolution)) cfg.res = r.resolution;
+  cfg.n = Number(r.n) || 1;
+  $('#prompt').value = r.prompt || '';
+  localStorage.setItem(PROMPT_KEY, $('#prompt').value);
+  writeForm();
+  updateParamLabel();
+  updateSizeNote();
+  renderModelList();
+  renderParamUI();
+  saveCfg(true);
+  $('#apPanel').classList.remove('on');
+  setNotice('ok', '参数已套用 ✓', '模型 / 比例 / 数量 / 提示词都填回去了，确认后点圆形生成键即可。');
+  log('已套用资产参数：' + (r.model || '') + ' ' + (r.size || ''), 'i');
+}
+async function removeAsset(r) {
+  if (!window.confirm('只删除资产库里的这条记录（文件夹里的图片不动），确定？')) return;
+  try { await assetDelete(r.key); } catch { /* ignore */ }
+  assetCache = (assetCache || []).filter((x) => x.key !== r.key);
+  assetSelKey = '';
+  await renderAssets(false);
+  log('已删除资产记录：' + r.name, 'i');
+}
+
+/* ---------- 从保存文件夹重建索引 ---------- */
+function parseStampName(name) {
+  // 形如 2026-09-18T12-34-56-gemini-3.1-flash-image-1536x864.jpg
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})-(.+?)\.(\w+)$/.exec(name);
+  if (!m) return null;
+  const ts = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}`).getTime();
+  let rest = m[7];
+  const d = /-(\d{3,5})x(\d{3,5})$/.exec(rest);
+  if (d) rest = rest.slice(0, d.index);
+  return { ts: Number.isFinite(ts) ? ts : Date.now(), model: rest, dims: d ? { w: +d[1], h: +d[2] } : null };
+}
+async function rescanFolder() {
+  if (!dirHandle) {
+    setNotice('warn', '还没有选保存文件夹', '先点「⚙ 接口设置」→「选择保存文件夹」，再回来点「重建索引」。');
+    return;
+  }
+  const btn = $('#apRescan');
+  btn.disabled = true; btn.textContent = '扫描中…';
+  try {
+    let p = await dirHandle.queryPermission({ mode: 'readwrite' });
+    if (p !== 'granted') p = await dirHandle.requestPermission({ mode: 'readwrite' });
+    if (p !== 'granted') { setNotice('warn', '没有文件夹读取权限', '再点一次「重建索引」，在浏览器弹窗里点「允许」。'); return; }
+
+    await assetLoadAll(false);
+    const have = new Set((assetCache || []).map((r) => r.name));
+    const sidecars = new Map();   // 图片名 → .json 里的信息
+    const files = [];
+    for await (const [name, h] of dirHandle.entries()) {
+      if (h.kind !== 'file') continue;
+      if (/\.json$/i.test(name)) files.push({ name, h, side: true });
+      else if (/\.(png|jpe?g|webp|gif)$/i.test(name)) files.push({ name, h, side: false });
+    }
+    for (const f of files.filter((x) => x.side)) {
+      try { sidecars.set(f.name.replace(/\.json$/i, ''), JSON.parse(await (await f.h.getFile()).text())); } catch { /* 坏文件跳过 */ }
+    }
+    let added = 0, recovered = 0, skipped = 0;
+    for (const f of files.filter((x) => !x.side)) {
+      if (have.has(f.name)) { skipped++; continue; }
+      const side = sidecars.get(f.name) || null;
+      const guess = parseStampName(f.name);
+      const rec = {
+        key: f.name, name: f.name,
+        ts: (side && side.ts) || (guess && guess.ts) || Date.now(),
+        prompt: (side && side.prompt) || '',
+        model: (side && side.model) || (guess && guess.model) || '',
+        size: (side && side.size) || '',
+        resolution: (side && side.resolution) || '',
+        quality: (side && side.quality) || '',
+        n: (side && side.n) || 1,
+        dims: (side && side.dims) || (guess && guess.dims) || null,
+        refs: (side && side.refs) || 0,
+        refThumbs: [],
+        elapsed: (side && side.elapsed) || '',
+        usage: (side && side.usage) || null,
+        saved: 'folder', folder: dirHandle.name, thumb: '', mid: '',
+      };
+      try {
+        const blob = await f.h.getFile();
+        rec.thumb = await makeThumbDataUrl(blob, 420, 0.8);
+        rec.mid = await makeThumbDataUrl(blob, 1440, 0.85);
+      } catch { /* 读不了图就只记元信息 */ }
+      if (!rec.mid) rec.mid = rec.thumb;
+      try { await assetPut(rec); } catch { /* ignore */ }
+      added++; if (side) recovered++;
+    }
+    assetCache = null;
+    await renderAssets(true);
+    log(`重建索引完成：文件夹 ${files.filter((x) => !x.side).length} 张图，新增 ${added} 条，已有 ${skipped} 条${recovered ? `（含 ${recovered} 份 .json 说明）` : ''}`, 's');
+    setNotice('ok', '索引已重建 ✓', `保存文件夹：${dirHandle.name}\n新增 ${added} 条记录，跳过 ${skipped} 条已存在的。`);
+  } catch (e) {
+    setNotice('err', '重建索引失败', (e && e.message) || '');
+  } finally {
+    btn.disabled = false; btn.textContent = '重建索引';
+  }
+}
+
+/* ---------- 打开面板 ---------- */
+async function openAssets() {
+  closePops();
+  $('#viewer').classList.remove('on');
+  $('#apPanel').classList.add('on');
+  $('#apDetail').innerHTML = '<div class="apEmpty">正在读取资产库…</div>';
+  await renderAssets(false);
+  log(`资产库：${(assetCache || []).length} 条记录`, 'i');
+}
+
+/* ---------- 事件绑定 ---------- */
+$('#btnGen').addEventListener('click', () => {
+  if (running) { if (abortCtrl) abortCtrl.abort('user'); return; }
+  generate();
+});
+$('#btnCfgToggle').addEventListener('click', (e) => toggleDrawer('cfgDrawer', e.currentTarget));
+$('#btnLogToggle').addEventListener('click', (e) => toggleDrawer('logDrawer', e.currentTarget));
+$('#btnSaveCfg').addEventListener('click', () => saveCfg(false));
+$('#btnTest').addEventListener('click', testConn);
+$('#btnClearLog').addEventListener('click', () => { $('#log').innerHTML = ''; });
+$('#btnDlAll').addEventListener('click', downloadAll);
+$('#btnEye').addEventListener('click', () => { const e = $('#apiKey'); e.type = e.type === 'password' ? 'text' : 'password'; });
+$('#btnPickDir').addEventListener('click', pickFolder);
+$('#autoSave').addEventListener('change', () => { saveCfg(true); });
+
+/* 资产库 */
+$('#btnAssets').addEventListener('click', () => openAssets());
+$('#apClose').addEventListener('click', () => $('#apPanel').classList.remove('on'));
+$('#apSearch').addEventListener('input', () => { renderAssets(false); });
+$('#apModel').addEventListener('change', () => { renderAssets(false); });
+$('#apSort').addEventListener('change', () => { renderAssets(false); });
+$('#apRescan').addEventListener('click', rescanFolder);
+
+$('#btnModel').addEventListener('click', (e) => {
+  const pop = $('#modelPop');
+  const wasOpen = pop.classList.contains('open');
+  closePops();
+  if (!wasOpen) { renderModelList(); placePop(pop, e.currentTarget); e.currentTarget.classList.add('on'); }
+});
+$('#btnParams').addEventListener('click', (e) => {
+  const pop = $('#paramPop');
+  const wasOpen = pop.classList.contains('open');
+  closePops();
+  if (!wasOpen) { renderParamUI(); placePop(pop, e.currentTarget); e.currentTarget.classList.add('on'); }
+});
+document.addEventListener('click', (e) => {
+  if (e.target.closest('.pop') || e.target.closest('#btnModel') || e.target.closest('#btnParams')) return;
+  closePops();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closePops();
+    $('#viewer').classList.remove('on');
+    $('#apPanel').classList.remove('on');
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); if (!running) generate(); }
+});
+$('#btnLink').addEventListener('click', () => {
+  cfg.linked = !cfg.linked;
+  $('#btnLink').classList.toggle('on', cfg.linked);
+  saveCfg(true);
+});
+function onSizeInput(which) {
+  const w = Number($('#sizeW').value), h = Number($('#sizeH').value);
+  if (!w || !h) return;
+  const r = RATIOS.find((x) => x.k === cfg.ratio);
+  if (cfg.linked && r && !r.auto) {
+    if (which === 'w') { const nh = r16(w * r.h / r.w); $('#sizeH').value = nh; }
+    else { const nw = r16(h * r.w / r.h); $('#sizeW').value = nw; }
+  }
+  cfg.sizeW = Number($('#sizeW').value);
+  cfg.sizeH = Number($('#sizeH').value);
+  cfg.ratio = '__custom__';
+  updateParamLabel();
+  updateSizeNote();
+  saveCfg(true);
+}
+$('#sizeW').addEventListener('change', () => onSizeInput('w'));
+$('#sizeH').addEventListener('change', () => onSizeInput('h'));
+$('#baseUrl').addEventListener('change', onBaseUrlEdited);
+$('#siteSelect').addEventListener('change', onSiteChange);
+$('#btnClearPrompt').addEventListener('click', () => {
+  if (!$('#prompt').value) return;
+  $('#prompt').value = '';
+  $('#prompt').dispatchEvent(new Event('input'));
+  log('已清空提示词', 'i');
+});
+/* 参考图：选文件 / 拖进来 / 粘贴 */
+$('#btnPickRefs').addEventListener('click', () => $('#refInput').click());
+$('#refInput').addEventListener('change', (e) => { addRefFiles([...e.target.files]); e.target.value = ''; });
+(() => {
+  const col = $('#composerCol');
+  ['dragenter', 'dragover'].forEach((ev) => col.addEventListener(ev, (e) => { e.preventDefault(); $('#refBox').classList.add('drag'); }));
+  ['dragleave', 'dragend'].forEach((ev) => col.addEventListener(ev, () => $('#refBox').classList.remove('drag')));
+  col.addEventListener('drop', (e) => {
+    e.preventDefault();
+    $('#refBox').classList.remove('drag');
+    const files = [...((e.dataTransfer && e.dataTransfer.files) || [])].filter((f) => /^image\//.test(f.type));
+    if (files.length) addRefFiles(files);
+  });
+})();
+document.addEventListener('paste', (e) => {
+  const files = [...((e.clipboardData && e.clipboardData.files) || [])].filter((f) => /^image\//.test(f.type));
+  if (files.length) { e.preventDefault(); addRefFiles(files); }
+});
+$('#prompt').addEventListener('input', () => localStorage.setItem(PROMPT_KEY, $('#prompt').value));
+$('#viewer').addEventListener('click', () => $('#viewer').classList.remove('on'));
+
+/* ---------- 归一化：旧配置里的 n / 数字字段可能是字符串，必须转成数字 ---------- */
+function normalizeCfg() {
+  cfg.n = Math.min(4, Math.max(1, Number(cfg.n) || 1));
+  cfg.maxAttempts = Math.min(20, Math.max(1, Number(cfg.maxAttempts) || 8));
+  cfg.timeoutMin = Math.min(60, Math.max(1, Number(cfg.timeoutMin) || 15));
+  cfg.sizeW = Math.round(Number(cfg.sizeW) || 1536);
+  cfg.sizeH = Math.round(Number(cfg.sizeH) || 864);
+  if (cfg.ratio !== '__custom__' && !RATIOS.some((r) => r.k === cfg.ratio)) cfg.ratio = '16:9';
+  if (!RES.some((r) => r.short === cfg.res)) cfg.res = '1.5K';
+  if (typeof cfg.model !== 'string' || !cfg.model) cfg.model = 'gpt-image-2';   // 不按本地列表判定，交给网关的模型列表去纠正
+  if (typeof cfg.linked !== 'boolean') cfg.linked = true;
+  if (!['auto', 'pixel', 'ratio', 'meta'].includes(cfg.paramStyle)) cfg.paramStyle = 'auto';
+  if (!cfg.styleByModel || typeof cfg.styleByModel !== 'object' || Array.isArray(cfg.styleByModel)) cfg.styleByModel = {};
+  if (!cfg.keysBySite || typeof cfg.keysBySite !== 'object' || Array.isArray(cfg.keysBySite)) cfg.keysBySite = {};
+  if (!cfg.modelBySite || typeof cfg.modelBySite !== 'object' || Array.isArray(cfg.modelBySite)) cfg.modelBySite = {};
+  // 老配置没有分站点存 Key：把它归到当前站点名下
+  if (cfg.apiKey && cfg.baseUrl) cfg.keysBySite[trimBase(cfg.baseUrl)] = cfg.apiKey;
+  if (typeof cfg.autoRetry !== 'boolean') cfg.autoRetry = true;
+}
+
+/* ---------- 启动 ---------- */
+(function init() {
+  const saved = loadCfg();
+  if (saved) Object.assign(cfg, saved);
+  normalizeCfg();
+  writeForm();
+  $('#modelLabel').textContent = cfg.model;
+  $('#prompt').value = localStorage.getItem(PROMPT_KEY) || localStorage.getItem('imgstudio.prompt.v1') || '';
+  updateParamLabel();
+  updateSizeNote();
+  renderModelList();
+  renderParamUI();
+  renderSiteSelect();
+  const hasKey = !!cfg.apiKey;
+  if (!hasKey) openDrawer('cfgDrawer');
+  restoreDir();   // 恢复上次选的保存文件夹（不支持就直接用浏览器下载）
+  log('工作台就绪。请求地址 = 基础地址 + /images/generations（页面会自动试出要不要带 /v1）', 'i');
+  log('提示：生图较慢。1536×864 实测约 2 分钟，4K 约 4~5 分钟，顶栏有实时计时。', 'i');
+  log('提示：遇到「被网关限流」是网关上游通道的事，不是你的设置问题，等几分钟再试。', 'i');
+  log('提示：默认「生成后自动保存」。想存进指定文件夹，点右上角「⚙ 接口设置」→「选择保存文件夹」。', 'i');
+  if (!hasKey) log('首次使用：点右上角「⚙ 接口设置」填入 API Key 并保存。', 'w');
+  else {
+    log('已从浏览器本地存储恢复上次的配置。', 's');
+    // 有配置就静默拉一次模型列表：换站点后模型名会不一样，这里自动对齐
+    refreshModels(true);
+  }
+})();
+</script>
+</body>
+</html>
